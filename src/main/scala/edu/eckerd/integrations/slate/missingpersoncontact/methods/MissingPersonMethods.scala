@@ -1,13 +1,13 @@
 package edu.eckerd.integrations.slate.missingpersoncontact.methods
 
 import cats.data.Xor
+
 import cats.implicits._
 import edu.eckerd.integrations.slate.missingpersoncontact.model._
-import edu.eckerd.integrations.slate.missingpersoncontact.persistence.{DBFunctions, DBImpl}
 import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG.SpremrgRow
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Success
+
 
 /**
   * Created by davenpcm on 7/27/16.
@@ -16,19 +16,66 @@ trait MissingPersonMethods {
 
   type PidmResponder = String => Future[Option[BigDecimal]]
   def pidmResponder : PidmResponder
-//  type DBUpdater = SpremrgRow => Future[Unit]
-//  def dbUpdater: DBUpdater
-//  type EmailResponder = Seq[MissingPersonContact] => Future[Unit]
-//  def emailResponder : EmailResponder
+  type UpdateResponder = SpremrgRow => Future[Unit]
+  def updateResponder : UpdateResponder
+  type EmailResponder = List[MissingPersonContact] => Future[Unit]
+  def emailResponder : EmailResponder
 
-  def TranformToRowOrEmail(missingPersonContact: MissingPersonResponse)
+  def ProcessResponses(seq: Seq[MissingPersonResponse]): Future[Unit] = partitionResponses(seq).map{
+    partitionedTuple =>
+      for {
+        _ <- SendEmail(partitionedTuple._1)
+        _ <- UpdateDatabase(partitionedTuple._2)
+      } yield ()
+  }
+
+  def UpdateDatabase(list: List[SpremrgRow])
+                    (implicit ec: ExecutionContext): Future[Unit] =
+    Future.traverse(list)(updateResponder).map(_ => ())
+
+  def SendEmail(list: List[MissingPersonContact]): Future[Unit] = emailResponder(list)
+
+  def partitionResponses(
+                          seq: Seq[MissingPersonResponse]
+                        ): Future[(List[MissingPersonContact], List[SpremrgRow])] =
+    Future.traverse(seq)(TransformToRowOrEmail)
+      .map(partitionXor)
+
+  def partitionXor(s: Seq[Xor[MissingPersonContact, SpremrgRow]]): (List[MissingPersonContact], List[SpremrgRow]) = {
+
+    val leftAcc = List[MissingPersonContact]()
+    val rightAcc = List[SpremrgRow]()
+
+    def fold(next: Xor[MissingPersonContact, SpremrgRow], acc: (List[MissingPersonContact], List[SpremrgRow]))
+    : (List[MissingPersonContact], List[SpremrgRow]) = next match {
+      case Xor.Left(missingPersonContact) =>
+        acc.copy( _1 = missingPersonContact :: acc._1)
+      case Xor.Right(row) =>
+        acc.copy( _2 = row :: acc._2 )
+    }
+
+    s.foldRight((leftAcc, rightAcc))(fold)
+  }
+
+  def convertToTypes(
+                      missingPersonResponse: MissingPersonResponse
+                    ): Xor[MissingPersonResponse, FinishedMissingPersonContact] = missingPersonResponse match {
+    case MissingPersonResponse(id, _, "Monkey", _, _, _, _) =>
+      Xor.Right(OptOut(id))
+    case MissingPersonResponse(id, relationship, name, Some(cell), Some(street), Some(city), Some(state)) =>
+      Xor.Right(CompleteMissingPersonContact(id, relationship, name, cell, street, city, state))
+    case _ => Xor.Left(missingPersonResponse)
+  }
+
+
+  def TransformToRowOrEmail(missingPersonContact: MissingPersonResponse)
                           (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
 
-    val convertedContact = convertToTypes(missingPersonContact)
+    val convertedContact: Xor[MissingPersonContact, FinishedMissingPersonContact] = convertToTypes(missingPersonContact)
     val phoneXor: Xor[MissingPersonContact, Option[PhoneNumber]] = convertedContact.flatMap(parsePhone)
     val zipXor : Xor[MissingPersonContact, String] = convertedContact.flatMap(parseZip)
     val futurePidmXor: Future[Xor[MissingPersonContact, BigDecimal]] = convertedContact
-      .bimap(pc => Future.successful(pc), x => pidmResponder(x.BannerID))
+      .bimap(Future.successful, x => pidmResponder(x.BannerID))
       .bisequence
       .map(_.flatMap(Xor.fromOption(_, missingPersonContact)))
 
@@ -101,17 +148,6 @@ trait MissingPersonMethods {
   def parseName(string: String): Name = {
     Name(string.takeWhile(_ != ' '), string.dropWhile(_ != ' ').drop(1))
   }
-
-  def convertToTypes(
-                      missingPersonResponse: MissingPersonResponse
-                    ): Xor[MissingPersonResponse, FinishedMissingPersonContact] = missingPersonResponse match {
-      case MissingPersonResponse(id, "8", name, Some(""), Some(""), Some(""), Some("")) =>
-        Xor.Right(OptOut(id))
-      case MissingPersonResponse(id, relationship, name, Some(cell), Some(street), Some(city), Some(state)) =>
-        Xor.Right(CompleteMissingPersonContact(id, relationship, name, cell, street, city, state))
-      case _ => Xor.Left(missingPersonResponse)
-    }
-
 
   def parsePhone(
                   missingPersonContact: FinishedMissingPersonContact
