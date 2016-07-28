@@ -21,7 +21,8 @@ trait MissingPersonMethods {
   type EmailResponder = List[MissingPersonContact] => Future[Unit]
   def emailResponder : EmailResponder
 
-  def ProcessResponses(seq: Seq[MissingPersonResponse]): Future[Unit] = partitionResponses(seq).map{
+  def ProcessResponses(seq: Seq[MissingPersonResponse])
+                      (implicit ec: ExecutionContext): Future[Unit] = partitionResponses(seq).map{
     partitionedTuple =>
       for {
         _ <- SendEmail(partitionedTuple._1)
@@ -33,11 +34,10 @@ trait MissingPersonMethods {
                     (implicit ec: ExecutionContext): Future[Unit] =
     Future.traverse(list)(updateResponder).map(_ => ())
 
-  def SendEmail(list: List[MissingPersonContact]): Future[Unit] = emailResponder(list)
+  def SendEmail(list: List[MissingPersonContact])(implicit ec: ExecutionContext): Future[Unit] = emailResponder(list)
 
-  def partitionResponses(
-                          seq: Seq[MissingPersonResponse]
-                        ): Future[(List[MissingPersonContact], List[SpremrgRow])] =
+  def partitionResponses(seq: Seq[MissingPersonResponse])
+                        (implicit ec: ExecutionContext): Future[(List[MissingPersonContact], List[SpremrgRow])] =
     Future.traverse(seq)(TransformToRowOrEmail)
       .map(partitionXor)
 

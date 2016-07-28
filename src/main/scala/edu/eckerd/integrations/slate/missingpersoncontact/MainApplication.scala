@@ -13,6 +13,7 @@ import scala.concurrent.duration._
   * Created by davenpcm on 7/27/16.
   */
 object MainApplication extends App with MissingPersonMethodsUnsafe {
+  val ec = global
 
   val responseF = Request.SingleRequestForConfig[MissingPersonResponse]("slate")
   .flatMap(ProcessResponses)
