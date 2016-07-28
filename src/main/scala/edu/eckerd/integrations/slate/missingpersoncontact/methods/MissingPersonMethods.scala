@@ -2,18 +2,17 @@ package edu.eckerd.integrations.slate.missingpersoncontact.methods
 
 import cats.data.Xor
 import cats.implicits._
-import edu.eckerd.integrations.slate.missingpersoncontact.model.MissingPersonContact
-import edu.eckerd.integrations.slate.missingpersoncontact.model.Name
-import edu.eckerd.integrations.slate.missingpersoncontact.model.PhoneNumber
+import edu.eckerd.integrations.slate.missingpersoncontact.model._
 import edu.eckerd.integrations.slate.missingpersoncontact.persistence.{DBFunctions, DBImpl}
 import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG.SpremrgRow
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Success
 
 /**
   * Created by davenpcm on 7/27/16.
   */
-trait MissingPersonMethods extends DBImpl {
+trait MissingPersonMethods {
 
   type PidmResponder = String => Future[Option[BigDecimal]]
   def pidmResponder : PidmResponder
@@ -22,96 +21,103 @@ trait MissingPersonMethods extends DBImpl {
 //  type EmailResponder = Seq[MissingPersonContact] => Future[Unit]
 //  def emailResponder : EmailResponder
 
-  def TranformToRowOrEmail(missingPersonContact: MissingPersonContact)(implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
-    val convertedStringContact = convertEmptyStringsOnMissingPerson(missingPersonContact)
+  def TranformToRowOrEmail(missingPersonContact: MissingPersonResponse)
+                          (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
 
-
-    val phoneXor: Xor[MissingPersonContact, Option[PhoneNumber]] = parsePhone(convertedStringContact)
-    val zipXor : Xor[MissingPersonContact, Option[String]] = parseZip(convertedStringContact)
-    val name: Name = parseName(convertedStringContact.Name)
-
-
-
-    val dataOrigin = "Slate Transfer"
-    val userId = "ECBATCH"
-    val priority = '8'
-    val lastName = name.last
-    val firstName = name.first
-
-    val futurePidmXor: Future[Xor[MissingPersonContact , BigDecimal]] = pidmResponder(convertedStringContact.BannerID)
-      .map( opt =>
-        Xor.fromOption(opt, convertedStringContact)
-      )
+    val convertedContact = convertToTypes(missingPersonContact)
+    val phoneXor: Xor[MissingPersonContact, Option[PhoneNumber]] = convertedContact.flatMap(parsePhone)
+    val zipXor : Xor[MissingPersonContact, String] = convertedContact.flatMap(parseZip)
+    val futurePidmXor: Future[Xor[MissingPersonContact, BigDecimal]] = convertedContact
+      .bimap(pc => Future.successful(pc), x => pidmResponder(x.BannerID))
+      .bisequence
+      .map(_.flatMap(Xor.fromOption(_, missingPersonContact)))
 
     for {
       pidmXor <- futurePidmXor
     } yield for {
+      contact <- convertedContact
       zip <- zipXor
       pidm <- pidmXor
-      phone <- phoneXor
-    } yield phone match {
-      case Some(phoneNumber) =>
+      phoneOpt <- phoneXor
+    } yield createRow(contact, zip, pidm, phoneOpt)
+  }
+
+  def createRow(
+                 contact: FinishedMissingPersonContact,
+                 zip: String,
+                 pidm: BigDecimal,
+                 phoneOpt: Option[PhoneNumber]
+               ): SpremrgRow = {
+    val dataOrigin = Some("Slate Transfer")
+    val userId = Some("ECBATCH")
+    val priority = '8'
+    val relationship = Some('8')
+    val time = new java.sql.Timestamp(new java.util.Date().getTime)
+    val nationCode = phoneOpt.map(_.natnCode)
+    val areaCode = phoneOpt.flatMap(_.areaCode)
+    val phoneNumber = phoneOpt.map(_.phoneNumber)
+
+    contact match {
+
+      case CompleteMissingPersonContact(_, _, name, _, street, city,_) =>
+        val pName: Name = parseName(name)
+        val firstName = pName.first
+        val lastName = pName.last
+
         SpremrgRow(
           pidm,
           priority,
-          lastName,
-          firstName,
-          convertedStringContact.AddressStreet,
-          convertedStringContact.AddressCity,
-          zip,
-          Some(phoneNumber.natnCode),
-          phoneNumber.areaCode,
-          Some(phoneNumber.phoneNumber),
-          Some(convertedStringContact.Relationship.charAt(0)),
-          new java.sql.Timestamp(new java.util.Date().getTime),
-          Some(dataOrigin),
-          Some(userId)
+          lastName, firstName,
+          Some(street), Some(city), Some(zip),
+          nationCode, areaCode, phoneNumber,
+          relationship,
+          time, dataOrigin, userId
         )
-      case None =>
+
+      case OptOut(_) =>
+        val firstName = "OPTED"
+        val lastName = "OUT"
+
         SpremrgRow(
-          pidm,
-          priority,
-          lastName,
-          firstName,
-          convertedStringContact.AddressStreet,
-          convertedStringContact.AddressCity,
-          convertedStringContact.AddressPostal,
-          None,
-          None,
-          None,
-          Some(convertedStringContact.Relationship.charAt(0)),
-          new java.sql.Timestamp(new java.util.Date().getTime),
-          Some(dataOrigin),
-          Some(userId)
+          pidm, priority,
+          lastName, firstName,
+          None, None, None,
+          nationCode, areaCode, phoneNumber,
+          relationship,
+          time, dataOrigin, userId
         )
-
     }
   }
 
-  def parseZip(missingPersonContact: MissingPersonContact): Xor[MissingPersonContact, Option[String]] = {
-    missingPersonContact.AddressPostal match {
-      case Some(zip) => if (zip.length <= 30) Xor.Right(Some(zip)) else Xor.Left(missingPersonContact)
-      case None => Xor.Right(None)
+  def parseZip(missingPersonContact: FinishedMissingPersonContact): Xor[MissingPersonContact, String] =
+    missingPersonContact match {
+      case OptOut(_) => Xor.Right("")
+      case CompleteMissingPersonContact(_, _ , _, _ , _ , _ , zip) =>
+        if ( zip.length <= 30) Xor.Right(zip)
+        else Xor.Left(missingPersonContact)
     }
-  }
+
 
   def parseName(string: String): Name = {
     Name(string.takeWhile(_ != ' '), string.dropWhile(_ != ' ').drop(1))
   }
 
-  def convertEmptyStringsOnMissingPerson(missingPersonContact: MissingPersonContact): MissingPersonContact = {
-    def ifBlankNone(s: String) : Option[String] = if (s == "") None else Some(s)
-    missingPersonContact match {
-      case MissingPersonContact(bi, r, n, Some(cell), Some(as), Some(ac), Some(ap)) =>
-        MissingPersonContact(bi, r, n, ifBlankNone(cell), ifBlankNone(as), ifBlankNone(ac), ifBlankNone(ap))
-      case _ => missingPersonContact
+  def convertToTypes(
+                      missingPersonResponse: MissingPersonResponse
+                    ): Xor[MissingPersonResponse, FinishedMissingPersonContact] = missingPersonResponse match {
+      case MissingPersonResponse(id, "8", name, Some(""), Some(""), Some(""), Some("")) =>
+        Xor.Right(OptOut(id))
+      case MissingPersonResponse(id, relationship, name, Some(cell), Some(street), Some(city), Some(state)) =>
+        Xor.Right(CompleteMissingPersonContact(id, relationship, name, cell, street, city, state))
+      case _ => Xor.Left(missingPersonResponse)
     }
-  }
 
-  def parsePhone(missingPersonContact: MissingPersonContact): Xor[MissingPersonContact, Option[PhoneNumber]] =
-    missingPersonContact.Cell match {
 
-    case Some(number) =>
+  def parsePhone(
+                  missingPersonContact: FinishedMissingPersonContact
+                ): Xor[FinishedMissingPersonContact, Option[PhoneNumber]] =
+    missingPersonContact match {
+      case CompleteMissingPersonContact(_, _ , _, number, _, _, _) =>
       val parse = number.replace("+", "").replace(".", "-").replace(" ", "-")
       parse match {
         case usNumber if usNumber.startsWith("1-") && usNumber.length == 14 =>
@@ -124,8 +130,7 @@ trait MissingPersonMethods extends DBImpl {
           Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
         case _ => Xor.Left(missingPersonContact)
       }
-
-    case None =>
+    case OptOut(_) =>
       Xor.Right(None)
     }
 
