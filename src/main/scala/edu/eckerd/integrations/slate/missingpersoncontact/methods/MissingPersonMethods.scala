@@ -21,6 +21,13 @@ trait MissingPersonMethods {
   type EmailResponder = List[MissingPersonContact] => Future[Unit]
   def emailResponder : EmailResponder
 
+  /**
+    * This is the SideEffect King. It executes the code using the responders and returns a Future of Unit
+    * so other than ensuring it does not fail there is not much to this other than to see it as the execution step
+    * @param seq The sequence of responses to process
+    * @param ec The execution context to fork from
+    * @return A Future of Unit
+    */
   def ProcessResponses(seq: Seq[MissingPersonResponse])
                       (implicit ec: ExecutionContext): Future[Unit] = partitionResponses(seq).map{
     partitionedTuple =>
@@ -30,17 +37,45 @@ trait MissingPersonMethods {
       } yield ()
   }
 
+  /**
+    * This is the function that updates all values in the database as a result this endpoint is the most likely
+    * for runtime failures as this is where we start to see the side effects
+    * @param list The list of rows to be added/updated in the database
+    * @param ec The execution context to fork from
+    * @return A Future of Unit
+    */
   def UpdateDatabase(list: List[SpremrgRow])
                     (implicit ec: ExecutionContext): Future[Unit] =
     Future.traverse(list)(updateResponder).map(_ => ())
 
+  /**
+    * This function sends the email out
+    * @param list The list of Contacts to Send
+    * @param ec The execution Context
+    * @return A Future of Unit
+    */
   def SendEmail(list: List[MissingPersonContact])(implicit ec: ExecutionContext): Future[Unit] = emailResponder(list)
 
+  /**
+    * This function takes the initial sequence and transforms it into a sequence of Xor and then partitions that
+    * into a tuple with the two types of data seperated
+    * @param seq The sequence of responses
+    * @param ec The execution context to fork from
+    * @return  A Future Tuple of a List of MissingPersonContact(to be emailed) and a List of SpremrgRow(to be upserted
+    *          in the database)
+    */
   def partitionResponses(seq: Seq[MissingPersonResponse])
                         (implicit ec: ExecutionContext): Future[(List[MissingPersonContact], List[SpremrgRow])] =
     Future.traverse(seq)(TransformToRowOrEmail)
       .map(partitionXor)
 
+  /**
+    * This function transforms a sequence of Xors into a Tuple of two lists of the two types. We fold copying the
+    * current value and adding the next value to the list. So we utilized the inherent duality of the Xor class
+    * to seperate it into two seperate sequences
+    * @param s The Sequence of Xors
+    * @return A Tuple of A List of MissingPersonContact and SpremrgRow
+    */
   def partitionXor(s: Seq[Xor[MissingPersonContact, SpremrgRow]]): (List[MissingPersonContact], List[SpremrgRow]) = {
 
     val leftAcc = List[MissingPersonContact]()
@@ -93,13 +128,14 @@ trait MissingPersonMethods {
                  contact: FinishedMissingPersonContact,
                  zip: String,
                  pidm: BigDecimal,
-                 phoneOpt: Option[PhoneNumber]
+                 phoneOpt: Option[PhoneNumber],
+                  time : java.sql.Timestamp = new java.sql.Timestamp(new java.util.Date().getTime)
                ): SpremrgRow = {
     val dataOrigin = Some("Slate Transfer")
     val userId = Some("ECBATCH")
     val priority = '8'
     val relationship = Some('8')
-    val time = new java.sql.Timestamp(new java.util.Date().getTime)
+
     val nationCode = phoneOpt.map(_.natnCode)
     val areaCode = phoneOpt.flatMap(_.areaCode)
     val phoneNumber = phoneOpt.map(_.phoneNumber)
@@ -154,18 +190,17 @@ trait MissingPersonMethods {
                 ): Xor[FinishedMissingPersonContact, Option[PhoneNumber]] =
     missingPersonContact match {
       case CompleteMissingPersonContact(_, _ , _, number, _, _, _) =>
-      val parse = number.replace("+", "").replace(".", "-").replace(" ", "-")
-      parse match {
-        case usNumber if usNumber.startsWith("1-") && usNumber.length == 14 =>
-          val areaCode = usNumber.dropWhile(_ != '-').drop(1).takeWhile(_ != '-')
-          val phoneNumber = usNumber.dropWhile(_ != '-').drop(1).dropWhile(_ != '-').drop(1).replace("-", "")
-          Xor.Right(Some(PhoneNumber("1", Some(areaCode), phoneNumber)))
-        case intlParsed if intlParsed.dropWhile(_ != "-").drop(1).length <= 12 && !intlParsed.startsWith("1-") =>
-          val natnCode = intlParsed.takeWhile(_ != "-")
-          val phoneNumber = intlParsed.dropWhile(_ != "-").drop(1).replace("-", "")
-          Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
-        case _ => Xor.Left(missingPersonContact)
-      }
+        number.replace("+", "").replace(".", "-").replace(" ", "-") match {
+          case usNumber if usNumber.startsWith("1-") && usNumber.length == 14 =>
+            val areaCode = usNumber.dropWhile(_ != '-').drop(1).takeWhile(_ != '-')
+            val phoneNumber = usNumber.dropWhile(_ != '-').drop(1).dropWhile(_ != '-').drop(1).replace("-", "")
+            Xor.Right(Some(PhoneNumber("1", Some(areaCode), phoneNumber)))
+          case intlParsed if intlParsed.dropWhile(_ != "-").drop(1).length <= 12 && !intlParsed.startsWith("1-") =>
+            val natnCode = intlParsed.takeWhile(_ != "-")
+            val phoneNumber = intlParsed.dropWhile(_ != "-").drop(1).replace("-", "")
+            Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
+          case _ => Xor.Left(missingPersonContact)
+        }
     case OptOut(_) =>
       Xor.Right(None)
     }
