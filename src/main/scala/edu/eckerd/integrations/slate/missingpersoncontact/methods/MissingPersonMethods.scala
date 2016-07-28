@@ -30,12 +30,12 @@ trait MissingPersonMethods {
     * @return A Future of Unit
     */
   def ProcessResponses(seq: Seq[MissingPersonContact])
-                      (implicit ec: ExecutionContext): Future[String] = partitionResponses(seq).flatMap{
+                      (implicit ec: ExecutionContext): Future[Unit] = partitionResponses(seq).flatMap{
     partitionedTuple =>
       for {
         _ <- SendEmail(partitionedTuple._1)
-        dataBaseUpdated <- UpdateDatabase(partitionedTuple._2)
-      } yield s"Database Entries Updated - ${dataBaseUpdated.sum}"
+        _ <- UpdateDatabase(partitionedTuple._2)
+      } yield ()
   }
 
   /**

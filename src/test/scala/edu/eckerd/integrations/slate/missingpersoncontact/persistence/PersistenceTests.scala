@@ -31,7 +31,7 @@ class PersistenceTests extends FlatSpec with Matchers with MissingPersonMethods 
   "UpdateDB" should "Be Able To Add A Row" in {
     val id = 100
     val row1 = createRow(OptOut(s"${id.toString}"), None, id, None)
-    Await.result(UpdateDB(row1), 2.seconds) should be (())
+    Await.result(UpdateDB(row1), 2.seconds) should be (1)
     Await.result(db.run(Spremrg.filter(_.spremrgPidm === id).result.head), 2.seconds) should be (row1)
   }
 
@@ -43,7 +43,7 @@ class PersistenceTests extends FlatSpec with Matchers with MissingPersonMethods 
       id,
       None
     )
-    Await.result(UpdateDB(row1), 2.seconds) should be (())
+    Await.result(UpdateDB(row1), 2.seconds) should be (1)
 
     Await.result(db.run(Spremrg.filter(_.spremrgPidm === id).result.head), 2.seconds) should be (row1)
   }

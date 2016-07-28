@@ -20,7 +20,7 @@ class MissingPersonContactMethodsTest extends FlatSpec with Matchers with Missin
       case passAsNone if passAsNone == "0" => Future.successful(None)
       case _ =>  Future.successful(Some(1))
     }
-    def dbUpdateResponder : UpdateResponder = _ => Future.successful(())
+    def dbUpdateResponder : UpdateResponder = _ => Future.successful(1)
     def emailResponder : EmailResponder = _ => Future.successful(())
     def timeResponder : java.sql.Timestamp = Timestamp.valueOf("2016-07-28 10:10:10.0")
 

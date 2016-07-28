@@ -26,11 +26,7 @@ object MainApplication extends App with DBImpl with MissingPersonMethods with Co
   val responseF = Request.SingleRequestForConfig[MissingPersonContact]("slate")
       .flatMap(ProcessResponses)
 
-//    .flatMap(partitionResponses)
-//  .flatMap(Future.traverse(_)(TransformToRowOrEmail))
-
   val response = Await.result(responseF, 60.seconds)
 
-//  response.foreach(println)
 
 }
