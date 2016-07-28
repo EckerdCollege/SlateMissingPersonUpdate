@@ -17,9 +17,10 @@ trait MissingPersonMethods {
   type PidmResponder = String => Future[Option[BigDecimal]]
   def pidmResponder : PidmResponder
   type UpdateResponder = SpremrgRow => Future[Unit]
-  def updateResponder : UpdateResponder
+  def dbUpdateResponder : UpdateResponder
   type EmailResponder = List[MissingPersonContact] => Future[Unit]
   def emailResponder : EmailResponder
+  def timeResponder : java.sql.Timestamp
 
   /**
     * This is the SideEffect King. It executes the code using the responders and returns a Future of Unit
@@ -46,7 +47,7 @@ trait MissingPersonMethods {
     */
   def UpdateDatabase(list: List[SpremrgRow])
                     (implicit ec: ExecutionContext): Future[Unit] =
-    Future.traverse(list)(updateResponder).map(_ => ())
+    Future.traverse(list)(dbUpdateResponder).map(_ => ())
 
   /**
     * This function sends the email out
@@ -68,6 +69,38 @@ trait MissingPersonMethods {
                         (implicit ec: ExecutionContext): Future[(List[MissingPersonContact], List[SpremrgRow])] =
     Future.traverse(seq)(TransformToRowOrEmail)
       .map(partitionXor)
+
+  /**
+    * This is the XorConverter Method. It takes a Response and parses it to Either a Row to be updated or a value
+    * to be sent in the email. It does this by first attempting to parse the record, then it generates additional
+    * Xors for phone, zip, and pidm which can all fail under the right circumstance. Finally it extracts the values
+    * from all of those possible outcomes to generate the final Row otherwise it returns the original response.
+    *
+    * @param missingPersonContact The response to validate
+    * @param ec the execution context to fork from
+    * @return A future of Xor of a MissingPersonContact, and a SpremrgRow with the right being the Option
+    *         we desire.
+    */
+  def TransformToRowOrEmail(missingPersonContact: MissingPersonResponse)
+                           (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
+
+    val convertedContact: Xor[MissingPersonContact, FinishedMissingPersonContact] = convertToTypes(missingPersonContact)
+    val phoneXor: Xor[MissingPersonContact, Option[PhoneNumber]] = convertedContact.flatMap(parsePhone)
+    val zipXor : Xor[MissingPersonContact, String] = convertedContact.flatMap(parseZip)
+    val futurePidmXor: Future[Xor[MissingPersonContact, BigDecimal]] = convertedContact
+      .bimap(Future.successful, x => pidmResponder(x.BannerID))
+      .bisequence
+      .map(_.flatMap(Xor.fromOption(_, missingPersonContact)))
+
+    for {
+      pidmXor <- futurePidmXor
+    } yield for {
+      contact <- convertedContact
+      zip <- zipXor
+      pidm <- pidmXor
+      phoneOpt <- phoneXor
+    } yield createRow(contact, zip, pidm, phoneOpt)
+  }
 
   /**
     * This function transforms a sequence of Xors into a Tuple of two lists of the two types. We fold copying the
@@ -102,72 +135,35 @@ trait MissingPersonMethods {
     case _ => Xor.Left(missingPersonResponse)
   }
 
-
-  def TransformToRowOrEmail(missingPersonContact: MissingPersonResponse)
-                          (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
-
-    val convertedContact: Xor[MissingPersonContact, FinishedMissingPersonContact] = convertToTypes(missingPersonContact)
-    val phoneXor: Xor[MissingPersonContact, Option[PhoneNumber]] = convertedContact.flatMap(parsePhone)
-    val zipXor : Xor[MissingPersonContact, String] = convertedContact.flatMap(parseZip)
-    val futurePidmXor: Future[Xor[MissingPersonContact, BigDecimal]] = convertedContact
-      .bimap(Future.successful, x => pidmResponder(x.BannerID))
-      .bisequence
-      .map(_.flatMap(Xor.fromOption(_, missingPersonContact)))
-
-    for {
-      pidmXor <- futurePidmXor
-    } yield for {
-      contact <- convertedContact
-      zip <- zipXor
-      pidm <- pidmXor
-      phoneOpt <- phoneXor
-    } yield createRow(contact, zip, pidm, phoneOpt)
-  }
-
   def createRow(
                  contact: FinishedMissingPersonContact,
                  zip: String,
                  pidm: BigDecimal,
                  phoneOpt: Option[PhoneNumber],
-                  time : java.sql.Timestamp = new java.sql.Timestamp(new java.util.Date().getTime)
+                 time : java.sql.Timestamp = timeResponder
                ): SpremrgRow = {
     val dataOrigin = Some("Slate Transfer")
     val userId = Some("ECBATCH")
     val priority = '8'
     val relationship = Some('8')
-
     val nationCode = phoneOpt.map(_.natnCode)
     val areaCode = phoneOpt.flatMap(_.areaCode)
     val phoneNumber = phoneOpt.map(_.phoneNumber)
-
     contact match {
-
       case CompleteMissingPersonContact(_, _, name, _, street, city,_) =>
         val pName: Name = parseName(name)
         val firstName = pName.first
         val lastName = pName.last
-
         SpremrgRow(
-          pidm,
-          priority,
-          lastName, firstName,
-          Some(street), Some(city), Some(zip),
-          nationCode, areaCode, phoneNumber,
-          relationship,
-          time, dataOrigin, userId
+          pidm, priority, lastName, firstName, Some(street), Some(city), Some(zip),
+          nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
-
       case OptOut(_) =>
         val firstName = "OPTED"
         val lastName = "OUT"
-
         SpremrgRow(
-          pidm, priority,
-          lastName, firstName,
-          None, None, None,
-          nationCode, areaCode, phoneNumber,
-          relationship,
-          time, dataOrigin, userId
+          pidm, priority, lastName, firstName, None, None, None,
+          nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
     }
   }
@@ -180,29 +176,26 @@ trait MissingPersonMethods {
         else Xor.Left(missingPersonContact)
     }
 
-
   def parseName(string: String): Name = {
     Name(string.takeWhile(_ != ' '), string.dropWhile(_ != ' ').drop(1))
   }
 
-  def parsePhone(
-                  missingPersonContact: FinishedMissingPersonContact
-                ): Xor[FinishedMissingPersonContact, Option[PhoneNumber]] =
-    missingPersonContact match {
-      case CompleteMissingPersonContact(_, _ , _, number, _, _, _) =>
-        number.replace("+", "").replace(".", "-").replace(" ", "-") match {
-          case usNumber if usNumber.startsWith("1-") && usNumber.length == 14 =>
-            val areaCode = usNumber.dropWhile(_ != '-').drop(1).takeWhile(_ != '-')
-            val phoneNumber = usNumber.dropWhile(_ != '-').drop(1).dropWhile(_ != '-').drop(1).replace("-", "")
-            Xor.Right(Some(PhoneNumber("1", Some(areaCode), phoneNumber)))
-          case intlParsed if intlParsed.dropWhile(_ != "-").drop(1).length <= 12 && !intlParsed.startsWith("1-") =>
-            val natnCode = intlParsed.takeWhile(_ != "-")
-            val phoneNumber = intlParsed.dropWhile(_ != "-").drop(1).replace("-", "")
-            Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
-          case _ => Xor.Left(missingPersonContact)
-        }
+  def parsePhone(missingPersonContact: FinishedMissingPersonContact)
+  : Xor[FinishedMissingPersonContact, Option[PhoneNumber]] = missingPersonContact match {
+    case CompleteMissingPersonContact(_, _ , _, number, _, _, _) =>
+      number.replace("+", "").replace(".", "-").replace(" ", "-") match {
+        case usNumber if usNumber.startsWith("1-") && usNumber.length == 14 =>
+          val areaCode = usNumber.dropWhile(_ != '-').drop(1).takeWhile(_ != '-')
+          val phoneNumber = usNumber.dropWhile(_ != '-').drop(1).dropWhile(_ != '-').drop(1).replace("-", "")
+          Xor.Right(Some(PhoneNumber("1", Some(areaCode), phoneNumber)))
+        case intlParsed if intlParsed.dropWhile(_ != "-").drop(1).length <= 12 && !intlParsed.startsWith("1-") =>
+          val natnCode = intlParsed.takeWhile(_ != "-")
+          val phoneNumber = intlParsed.dropWhile(_ != "-").drop(1).replace("-", "")
+          Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
+        case _ => Xor.Left(missingPersonContact)
+      }
     case OptOut(_) =>
       Xor.Right(None)
-    }
+  }
 
 }
