@@ -1,8 +1,6 @@
 package edu.eckerd.integrations.slate.missingpersoncontact.persistence
 
 import com.typesafe.scalalogging.LazyLogging
-import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG.Spremrg
-import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG.SpremrgRow
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 
@@ -11,7 +9,7 @@ import scala.concurrent.{ ExecutionContext, Future }
 /**
  * Created by davenpcm on 7/5/16.
  */
-trait DBFunctions extends LazyLogging {
+trait DBFunctions extends LazyLogging with SPREMRG {
   val profile: slick.driver.JdbcProfile
 
   /**
@@ -23,13 +21,13 @@ trait DBFunctions extends LazyLogging {
    * @param db The database to fetch information from
    * @return An option of a PIDM if the functioin returns one.
    */
-  def getPidmFromBannerID(bannerID: String)(implicit ec: ExecutionContext, db: JdbcProfile#Backend#Database): Future[Option[BigDecimal]] = {
+  def getPidmFromBannerID(bannerID: String)(implicit ec: ExecutionContext, db: JdbcProfile#Backend#Database): Future[Option[Int]] = {
     import profile.api._
 
     val id = bannerID.toUpperCase
     val action = sql"""SELECT gwf_get_pidm($id, 'E') from sys.dual""".as[Option[String]]
     val newAction = action.head
-    db.run(newAction).map(_.map(BigDecimal(_)))
+    db.run(newAction).map(_.map(_.toInt))
   }
 
 //  /**

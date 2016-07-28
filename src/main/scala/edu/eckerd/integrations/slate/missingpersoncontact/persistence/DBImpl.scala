@@ -1,5 +1,6 @@
 package edu.eckerd.integrations.slate.missingpersoncontact.persistence
 
+//import edu.eckerd.integrations.slate.missingpersoncontact.utils.ConfigurationModuleImpl
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcProfile
 

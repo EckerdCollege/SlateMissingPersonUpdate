@@ -1,6 +1,6 @@
 name := "SlateMissingPersonUpdate"
 
-version := "0.1.0"
+version := "0.1.0-SNAPSHOT"
 
 scalaVersion := "2.11.8"
 
@@ -18,7 +18,8 @@ libraryDependencies ++= {
     "ch.qos.logback" % "logback-classic" % "1.1.3",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.4.0",
     "org.typelevel" %% "cats" % "0.6.1",
-    "org.scalatest" %% "scalatest" % scalaTestV % "test",
-    "me.lessis" %% "courier" % "0.1.3"
+    "me.lessis" %% "courier" % "0.1.3",
+    "com.h2database" % "h2" % "1.4.187" % "test",
+    "org.scalatest" %% "scalatest" % scalaTestV % "test"
   )
 }

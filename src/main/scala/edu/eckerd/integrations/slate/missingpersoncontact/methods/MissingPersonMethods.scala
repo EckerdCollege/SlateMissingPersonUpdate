@@ -1,10 +1,9 @@
 package edu.eckerd.integrations.slate.missingpersoncontact.methods
 
 import cats.data.Xor
-
 import cats.implicits._
 import edu.eckerd.integrations.slate.missingpersoncontact.model._
-import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG.SpremrgRow
+import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -13,8 +12,9 @@ import scala.concurrent.{ExecutionContext, Future}
   * Created by davenpcm on 7/27/16.
   */
 trait MissingPersonMethods {
+  this : SPREMRG =>
 
-  type PidmResponder = String => Future[Option[BigDecimal]]
+  type PidmResponder = String => Future[Option[Int]]
   def pidmResponder : PidmResponder
   type UpdateResponder = SpremrgRow => Future[Unit]
   def dbUpdateResponder : UpdateResponder
@@ -84,12 +84,10 @@ trait MissingPersonMethods {
     */
   def TransformToRowOrEmail(missingPersonContact: MissingPersonContact)
                            (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
-    val futurePidm : Future[Xor[MissingPersonContact, BigDecimal]] = pidmResponder(missingPersonContact.BannerID)
+    val futurePidm : Future[Xor[MissingPersonContact, Int]] = pidmResponder(missingPersonContact.BannerID)
       .map(Xor.fromOption(_, missingPersonContact))
     val phoneXor: Xor[MissingPersonResponse, Option[PhoneNumber]] = parsePhone(missingPersonContact)
     val zipXor : Xor[MissingPersonResponse, Option[String]] = parseZip(missingPersonContact)
-
-
     for {
       pidmXor <- futurePidm
     } yield for {
@@ -125,7 +123,7 @@ trait MissingPersonMethods {
   def createRow(
                  contact: MissingPersonContact,
                  zip: Option[String],
-                 pidm: BigDecimal,
+                 pidm: Int,
                  phoneOpt: Option[PhoneNumber],
                  time : java.sql.Timestamp = timeResponder
                ): SpremrgRow = {

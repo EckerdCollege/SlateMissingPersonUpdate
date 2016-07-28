@@ -2,9 +2,9 @@ package edu.eckerd.integrations.slate.missingpersoncontact.persistence
 
 // AUTO-GENERATED Slick data model
 /** Stand-alone Slick data model for immediate use */
-object SPREMRG extends {
-  val profile = com.typesafe.slick.driver.oracle.OracleDriver
-} with SPREMRG
+//object SPREMRG extends {
+//  val profile = com.typesafe.slick.driver.oracle.OracleDriver
+//} with SPREMRG
 
 /** Slick data model trait for extension, choice of backend or usage in the cake pattern. (Make sure to initialize this late.) */
 trait SPREMRG {
@@ -22,7 +22,7 @@ trait SPREMRG {
   def ddl = schema
 
   case class SpremrgRow(
-    pidm: BigDecimal,
+    pidm: Int,
     priority: Char,
     lastName: String,
     firstName: String,
@@ -59,7 +59,7 @@ trait SPREMRG {
     ) <> (SpremrgRow.tupled, SpremrgRow.unapply)
 
     /** Database column SPREMRG_PIDM SqlType(NUMBER) */
-    val spremrgPidm: Rep[scala.math.BigDecimal] = column[scala.math.BigDecimal]("SPREMRG_PIDM")
+    val spremrgPidm: Rep[Int] = column[Int]("SPREMRG_PIDM")
     /** Database column SPREMRG_PRIORITY SqlType(VARCHAR2) */
     val spremrgPriority: Rep[Char] = column[Char]("SPREMRG_PRIORITY")
     /** Database column SPREMRG_LAST_NAME SqlType(VARCHAR2), Length(60,true) */
