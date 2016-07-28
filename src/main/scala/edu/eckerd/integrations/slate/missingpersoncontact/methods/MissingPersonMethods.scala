@@ -18,7 +18,7 @@ trait MissingPersonMethods {
   def pidmResponder : PidmResponder
   type UpdateResponder = SpremrgRow => Future[Unit]
   def dbUpdateResponder : UpdateResponder
-  type EmailResponder = List[MissingPersonContact] => Future[Unit]
+  type EmailResponder = String => Future[Unit]
   def emailResponder : EmailResponder
   def timeResponder : java.sql.Timestamp
 
@@ -29,7 +29,7 @@ trait MissingPersonMethods {
     * @param ec The execution context to fork from
     * @return A Future of Unit
     */
-  def ProcessResponses(seq: Seq[MissingPersonResponse])
+  def ProcessResponses(seq: Seq[MissingPersonContact])
                       (implicit ec: ExecutionContext): Future[Unit] = partitionResponses(seq).map{
     partitionedTuple =>
       for {
@@ -55,7 +55,8 @@ trait MissingPersonMethods {
     * @param ec The execution Context
     * @return A Future of Unit
     */
-  def SendEmail(list: List[MissingPersonContact])(implicit ec: ExecutionContext): Future[Unit] = emailResponder(list)
+  def SendEmail(list: List[MissingPersonContact])(implicit ec: ExecutionContext): Future[Unit] =
+    emailResponder(generateCompleteHtmlString(list))
 
   /**
     * This function takes the initial sequence and transforms it into a sequence of Xor and then partitions that
@@ -65,7 +66,7 @@ trait MissingPersonMethods {
     * @return  A Future Tuple of a List of MissingPersonContact(to be emailed) and a List of SpremrgRow(to be upserted
     *          in the database)
     */
-  def partitionResponses(seq: Seq[MissingPersonResponse])
+  def partitionResponses(seq: Seq[MissingPersonContact])
                         (implicit ec: ExecutionContext): Future[(List[MissingPersonContact], List[SpremrgRow])] =
     Future.traverse(seq)(TransformToRowOrEmail)
       .map(partitionXor)
@@ -81,25 +82,21 @@ trait MissingPersonMethods {
     * @return A future of Xor of a MissingPersonContact, and a SpremrgRow with the right being the Option
     *         we desire.
     */
-  def TransformToRowOrEmail(missingPersonContact: MissingPersonResponse)
+  def TransformToRowOrEmail(missingPersonContact: MissingPersonContact)
                            (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
+    val futurePidm : Future[Xor[MissingPersonContact, BigDecimal]] = pidmResponder(missingPersonContact.BannerID)
+      .map(Xor.fromOption(_, missingPersonContact))
+    val phoneXor: Xor[MissingPersonResponse, Option[PhoneNumber]] = parsePhone(missingPersonContact)
+    val zipXor : Xor[MissingPersonResponse, Option[String]] = parseZip(missingPersonContact)
 
-    val convertedContact: Xor[MissingPersonContact, FinishedMissingPersonContact] = convertToTypes(missingPersonContact)
-    val phoneXor: Xor[MissingPersonContact, Option[PhoneNumber]] = convertedContact.flatMap(parsePhone)
-    val zipXor : Xor[MissingPersonContact, String] = convertedContact.flatMap(parseZip)
-    val futurePidmXor: Future[Xor[MissingPersonContact, BigDecimal]] = convertedContact
-      .bimap(Future.successful, x => pidmResponder(x.BannerID))
-      .bisequence
-      .map(_.flatMap(Xor.fromOption(_, missingPersonContact)))
 
     for {
-      pidmXor <- futurePidmXor
+      pidmXor <- futurePidm
     } yield for {
-      contact <- convertedContact
-      zip <- zipXor
       pidm <- pidmXor
       phoneOpt <- phoneXor
-    } yield createRow(contact, zip, pidm, phoneOpt)
+      zipOpt <- zipXor
+    } yield createRow(missingPersonContact, zipOpt, pidm, phoneOpt)
   }
 
   /**
@@ -116,8 +113,8 @@ trait MissingPersonMethods {
 
     def fold(next: Xor[MissingPersonContact, SpremrgRow], acc: (List[MissingPersonContact], List[SpremrgRow]))
     : (List[MissingPersonContact], List[SpremrgRow]) = next match {
-      case Xor.Left(missingPersonContact) =>
-        acc.copy( _1 = missingPersonContact :: acc._1)
+      case Xor.Left(missingPersonResponse) =>
+        acc.copy( _1 = missingPersonResponse :: acc._1)
       case Xor.Right(row) =>
         acc.copy( _2 = row :: acc._2 )
     }
@@ -125,19 +122,9 @@ trait MissingPersonMethods {
     s.foldRight((leftAcc, rightAcc))(fold)
   }
 
-  def convertToTypes(
-                      missingPersonResponse: MissingPersonResponse
-                    ): Xor[MissingPersonResponse, FinishedMissingPersonContact] = missingPersonResponse match {
-    case MissingPersonResponse(id, _, "Monkey", _, _, _, _) =>
-      Xor.Right(OptOut(id))
-    case MissingPersonResponse(id, relationship, name, Some(cell), Some(street), Some(city), Some(state)) =>
-      Xor.Right(CompleteMissingPersonContact(id, relationship, name, cell, street, city, state))
-    case _ => Xor.Left(missingPersonResponse)
-  }
-
   def createRow(
-                 contact: FinishedMissingPersonContact,
-                 zip: String,
+                 contact: MissingPersonContact,
+                 zip: Option[String],
                  pidm: BigDecimal,
                  phoneOpt: Option[PhoneNumber],
                  time : java.sql.Timestamp = timeResponder
@@ -150,17 +137,17 @@ trait MissingPersonMethods {
     val areaCode = phoneOpt.flatMap(_.areaCode)
     val phoneNumber = phoneOpt.map(_.phoneNumber)
     contact match {
-      case CompleteMissingPersonContact(_, _, name, _, street, city,_) =>
+      case MissingPersonResponse(_, _, name, _, street, city,_) =>
         val pName: Name = parseName(name)
         val firstName = pName.first
         val lastName = pName.last
         SpremrgRow(
-          pidm, priority, lastName, firstName, Some(street), Some(city), Some(zip),
+          pidm, priority, lastName, firstName, Some(street), Some(city), zip,
           nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
       case OptOut(_) =>
-        val firstName = "OPTED"
-        val lastName = "OUT"
+        val firstName = "OPTION"
+        val lastName = "DECLINED"
         SpremrgRow(
           pidm, priority, lastName, firstName, None, None, None,
           nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
@@ -168,22 +155,23 @@ trait MissingPersonMethods {
     }
   }
 
-  def parseZip(missingPersonContact: FinishedMissingPersonContact): Xor[MissingPersonContact, String] =
+  def parseZip(missingPersonContact: MissingPersonContact): Xor[MissingPersonResponse, Option[String]] =
     missingPersonContact match {
-      case OptOut(_) => Xor.Right("")
-      case CompleteMissingPersonContact(_, _ , _, _ , _ , _ , zip) =>
-        if ( zip.length <= 30) Xor.Right(zip)
-        else Xor.Left(missingPersonContact)
+      case OptOut(_) => Xor.Right(None)
+      case MissingPersonResponse(_, _ , _, _ , _ , _ , zip) if zip.length <= 30 => Xor.Right(Some(zip))
+      case responseUnmatched : MissingPersonResponse => Xor.Left(responseUnmatched)
     }
 
   def parseName(string: String): Name = {
     Name(string.takeWhile(_ != ' '), string.dropWhile(_ != ' ').drop(1))
   }
 
-  def parsePhone(missingPersonContact: FinishedMissingPersonContact)
-  : Xor[FinishedMissingPersonContact, Option[PhoneNumber]] = missingPersonContact match {
-    case CompleteMissingPersonContact(_, _ , _, number, _, _, _) =>
-      number.replace("+", "").replace(".", "-").replace(" ", "-") match {
+  def parsePhone(missingPersonContact: MissingPersonContact)
+  : Xor[MissingPersonResponse, Option[PhoneNumber]] = missingPersonContact match {
+    case OptOut(_) =>
+      Xor.Right(None)
+    case missingPersonResponse: MissingPersonResponse =>
+      missingPersonResponse.Cell.replace("+", "").replace(".", "-").replace(" ", "-") match {
         case usNumber if usNumber.startsWith("1-") && usNumber.length == 14 =>
           val areaCode = usNumber.dropWhile(_ != '-').drop(1).takeWhile(_ != '-')
           val phoneNumber = usNumber.dropWhile(_ != '-').drop(1).dropWhile(_ != '-').drop(1).replace("-", "")
@@ -192,10 +180,68 @@ trait MissingPersonMethods {
           val natnCode = intlParsed.takeWhile(_ != "-")
           val phoneNumber = intlParsed.dropWhile(_ != "-").drop(1).replace("-", "")
           Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
-        case _ => Xor.Left(missingPersonContact)
+        case _ => Xor.Left(missingPersonResponse)
       }
-    case OptOut(_) =>
-      Xor.Right(None)
+  }
+
+  def generateHtmlString(missingPersonContact: MissingPersonContact): String = {
+    val baseTable: (String, String, String, String, String, String, String) => String =
+      (BannerID, Relationship, Name, Cell, AddressStreet, AddressCity, AddressPostal) =>
+      s"""<tr>
+         |  <td>$BannerID</td>
+         |  <td>$Relationship</td>
+         |  <td>$Name</td>
+         |  <td>$Cell</td>
+         |  <td>$AddressStreet</td>
+         |  <td>$AddressCity</td>
+         |  <td>$AddressPostal</td>
+         |</tr>
+       """.stripMargin
+    missingPersonContact match {
+      case OptOut(id) => baseTable(id,"8","OPTION DECLINED","","","","")
+      case MissingPersonResponse(s1, s2, s3, s4, s5, s6, s7) => baseTable(s1,s2, s3, s4, s5, s6, s7)
+    }
+  }
+
+  def generateCompleteHtmlString(list: List[MissingPersonContact]): String = {
+    val content = list.foldLeft("")(_ + generateHtmlString(_))
+    """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+      |<html xmlns="http://www.w3.org/1999/xhtml">
+      |    <head>
+      |        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+      |        <title></title>
+      |        <style></style>
+      |    </head>
+      |    <body>
+      |        <table border="0" cellpadding="0" cellspacing="0" height="100%" width="100%" id="bodyTable">
+      |            <tr>
+      |                <td align="center" valign="top">
+      |                    <table border="0" cellpadding="0" cellspacing="0" width="800" id="emailContainer">
+      |                        <tr>
+      |                            <td align="center" valign="top">
+      |                                <h2>Unparsed Emergency Contacts</h2>
+      |                            </td>
+      |                        </tr>
+      |                        <table border="0" cellpadding="2" cellspacing="2" height="100%" width=100% id="emergencycontact">
+      |                        <tr>
+      |                        <th>Banner ID</th>
+      |                        <th>Relationship</th>
+      |                        <th>Name</th>
+      |                        <th>Phone Number</th>
+      |                        <th>Street Address</th>
+      |                        <th>City</th>
+      |                        <th>Zip Code</th>
+      |                        </tr>""".stripMargin +
+      content +
+      """
+        |                        </table>
+        |                    </table>
+        |                </td>
+        |            </tr>
+        |        </table>
+        |    </body>
+        |</html>
+      """.stripMargin
   }
 
 }

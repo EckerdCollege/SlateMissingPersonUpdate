@@ -6,9 +6,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import edu.eckerd.integrations.slate.missingpersoncontact.request.jsonProtocol._
 import edu.eckerd.integrations.slate.core.Request
 import edu.eckerd.integrations.slate.missingpersoncontact.methods.MissingPersonMethods
-import edu.eckerd.integrations.slate.missingpersoncontact.model.MissingPersonResponse
+import edu.eckerd.integrations.slate.missingpersoncontact.model.{MissingPersonContact, MissingPersonResponse}
 import edu.eckerd.integrations.slate.missingpersoncontact.persistence.DBImpl
 
+import scala.concurrent.Future
 import scala.concurrent.Await
 import scala.concurrent.duration._
 /**
@@ -18,12 +19,18 @@ object MainApplication extends App with DBImpl with MissingPersonMethods {
 
   override def pidmResponder: PidmResponder = getPidmFromBannerID
   override def dbUpdateResponder: UpdateResponder = UpdateDB
-  override def emailResponder: EmailResponder = ???
+  override def emailResponder: EmailResponder = (s: String) => Future.successful(println(s))
   override def timeResponder: Timestamp = new java.sql.Timestamp(new java.util.Date().getTime)
 
-  val responseF = Request.SingleRequestForConfig[MissingPersonResponse]("slate")
-  .flatMap(ProcessResponses)
+  val responseF = Request.SingleRequestForConfig[MissingPersonContact]("slate")
+      .flatMap(ProcessResponses)
+
+//    .flatMap(partitionResponses)
+//  .flatMap(Future.traverse(_)(TransformToRowOrEmail))
 
   val response = Await.result(responseF, 60.seconds)
+
+
+//  response.foreach(println)
 
 }

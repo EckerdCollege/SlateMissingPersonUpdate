@@ -3,27 +3,41 @@ package edu.eckerd.integrations.slate.missingpersoncontact.model
 /**
   * Created by davenpcm on 7/27/16.
   */
-sealed trait MissingPersonContact{
+sealed trait MissingPersonContact {
   val BannerID: String
 }
 
-case class MissingPersonResponse(
-                                  BannerID: String,
-                                  Relationship: String,
-                                  Name: String,
-                                  Cell: Option[String],
-                                  AddressStreet: Option[String],
-                                  AddressCity: Option[String],
-                                  AddressPostal: Option[String]
-                                ) extends MissingPersonContact
+object MissingPersonContact{
+  def apply(BannerID: String,
+            Relationship: String,
+            Name: String,
+            Cell: String,
+            AddressStreet: String,
+            AddressCity: String,
+            AddressPostal: String): MissingPersonContact = Name match {
+    case optOutConvert if optOutConvert == "OPTION DECLINED" =>
+      OptOut(BannerID)
+    case _ => MissingPersonResponse(BannerID, Relationship, Name, Cell, AddressStreet, AddressCity, AddressPostal)
+  }
 
-sealed trait FinishedMissingPersonContact extends MissingPersonContact
+  def apply(missingPersonResponse: MissingPersonResponse): MissingPersonContact =
+    this.apply(
+      missingPersonResponse.BannerID,
+      missingPersonResponse.Relationship,
+      missingPersonResponse.Name,
+      missingPersonResponse.Cell,
+      missingPersonResponse.AddressStreet,
+      missingPersonResponse.AddressCity,
+      missingPersonResponse.AddressPostal
+    )
+
+}
 
 case class OptOut(
                    BannerID: String
-                 ) extends FinishedMissingPersonContact
+                 ) extends MissingPersonContact
 
-case class CompleteMissingPersonContact(
+case class MissingPersonResponse(
                                          BannerID: String,
                                          Relationship: String,
                                          Name: String,
@@ -31,5 +45,5 @@ case class CompleteMissingPersonContact(
                                          AddressStreet: String,
                                          AddressCity: String,
                                          AddressPostal: String
-                                       ) extends FinishedMissingPersonContact
+                                       ) extends MissingPersonContact
 
