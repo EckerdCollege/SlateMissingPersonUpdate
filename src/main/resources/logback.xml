@@ -31,7 +31,7 @@
     <logger name="edu.eckerd" level="info" />
     <logger name="com.zaxxer.hikari" level="error" />
     <!-- Configure so that it outputs to both console and log file -->
-    <root level="info">
+    <root level="error">
         <!--<appender-ref ref="FILE" />-->
         <appender-ref ref="STDOUT" />
     </root>

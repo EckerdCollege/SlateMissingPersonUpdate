@@ -16,7 +16,7 @@ trait MissingPersonMethods {
 
   type PidmResponder = String => Future[Option[Int]]
   def pidmResponder : PidmResponder
-  type UpdateResponder = SpremrgRow => Future[Unit]
+  type UpdateResponder = SpremrgRow => Future[Int]
   def dbUpdateResponder : UpdateResponder
   type EmailResponder = String => Future[Unit]
   def emailResponder : EmailResponder
@@ -30,12 +30,12 @@ trait MissingPersonMethods {
     * @return A Future of Unit
     */
   def ProcessResponses(seq: Seq[MissingPersonContact])
-                      (implicit ec: ExecutionContext): Future[Unit] = partitionResponses(seq).map{
+                      (implicit ec: ExecutionContext): Future[String] = partitionResponses(seq).flatMap{
     partitionedTuple =>
       for {
         _ <- SendEmail(partitionedTuple._1)
-        _ <- UpdateDatabase(partitionedTuple._2)
-      } yield ()
+        dataBaseUpdated <- UpdateDatabase(partitionedTuple._2)
+      } yield s"Database Entries Updated - ${dataBaseUpdated.sum}"
   }
 
   /**
@@ -46,8 +46,8 @@ trait MissingPersonMethods {
     * @return A Future of Unit
     */
   def UpdateDatabase(list: List[SpremrgRow])
-                    (implicit ec: ExecutionContext): Future[Unit] =
-    Future.traverse(list)(dbUpdateResponder).map(_ => ())
+                    (implicit ec: ExecutionContext): Future[List[Int]] =
+    Future.traverse(list)(dbUpdateResponder)
 
   /**
     * This function sends the email out
@@ -174,7 +174,9 @@ trait MissingPersonMethods {
           val areaCode = usNumber.dropWhile(_ != '-').drop(1).takeWhile(_ != '-')
           val phoneNumber = usNumber.dropWhile(_ != '-').drop(1).dropWhile(_ != '-').drop(1).replace("-", "")
           Xor.Right(Some(PhoneNumber("1", Some(areaCode), phoneNumber)))
-        case intlParsed if intlParsed.dropWhile(_ != "-").drop(1).length <= 12 && !intlParsed.startsWith("1-") =>
+        case intlParsed if intlParsed.dropWhile(_ != "-").drop(1).length <= 12 &&
+          !intlParsed.startsWith("1-") &&
+        intlParsed.takeWhile(_ != "-").length <= 4 =>
           val natnCode = intlParsed.takeWhile(_ != "-")
           val phoneNumber = intlParsed.dropWhile(_ != "-").drop(1).replace("-", "")
           Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
