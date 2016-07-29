@@ -1,10 +1,12 @@
 name := "SlateMissingPersonUpdate"
 
-version := "0.1.0"
+version := "0.1.0-SNAPSHOT"
 
 scalaVersion := "2.11.8"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
+resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/"
+resolvers += "ERI OSS" at "http://dl.bintray.com/elderresearch/OSS"
 
 libraryDependencies ++= {
   val slickV = "3.1.1"
@@ -17,6 +19,9 @@ libraryDependencies ++= {
     "ch.qos.logback" % "logback-classic" % "1.1.3",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.4.0",
     "org.typelevel" %% "cats" % "0.6.1",
+    "me.lessis" %% "courier" % "0.1.3",
+    "com.elderresearch" %% "ssc" % "0.2.0",
+    "com.h2database" % "h2" % "1.4.187" % "test",
     "org.scalatest" %% "scalatest" % scalaTestV % "test"
   )
 }

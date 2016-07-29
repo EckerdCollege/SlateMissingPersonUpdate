@@ -1,24 +1,6 @@
-/*
- * Copyright 2016 Eckerd College
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package edu.eckerd.integrations.slate.missingpersoncontact.persistence
 
 import com.typesafe.scalalogging.LazyLogging
-import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG.Spremrg
-import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG.SpremrgRow
 import slick.driver.JdbcProfile
 import slick.jdbc.GetResult
 
@@ -27,7 +9,7 @@ import scala.concurrent.{ ExecutionContext, Future }
 /**
  * Created by davenpcm on 7/5/16.
  */
-trait DBFunctions extends LazyLogging {
+trait DBFunctions extends LazyLogging with SPREMRG {
   val profile: slick.driver.JdbcProfile
 
   /**
@@ -39,36 +21,13 @@ trait DBFunctions extends LazyLogging {
    * @param db The database to fetch information from
    * @return An option of a PIDM if the functioin returns one.
    */
-  def getPidmFromBannerID(bannerID: String)(implicit ec: ExecutionContext, db: JdbcProfile#Backend#Database): Future[Option[BigDecimal]] = {
+  def getPidmFromBannerID(bannerID: String)(implicit ec: ExecutionContext, db: JdbcProfile#Backend#Database): Future[Option[Int]] = {
     import profile.api._
 
     val id = bannerID.toUpperCase
     val action = sql"""SELECT gwf_get_pidm($id, 'E') from sys.dual""".as[Option[String]]
     val newAction = action.head
-    db.run(newAction).map(_.map(BigDecimal(_)))
-  }
-
-  /**
-   * This generates a Map from the description of the Relationship ie Mother, Father, Spouse to a code
-   * value such as M, F , etc.
-   * @param ec The execution context to fork futures from
-   * @param db The database to fetch information from
-   * @return This returns a Map of String -> Char
-   */
-  def generateRelationshipMap()(implicit ec: ExecutionContext, db: JdbcProfile#Backend#Database): Future[Map[String, Char]] = {
-    import profile.api._
-
-    case class Relationship(code: String, description: Option[String])
-    implicit val getRelationshipResult = GetResult(r => Relationship(r.<<, r.<<))
-
-    val action = sql"""SELECT STVRELT_CODE, STVRELT_DESC FROM STVRELT""".as[Relationship]
-
-    for {
-      relationships <- db.run(action)
-    } yield {
-      val relationshipsFiltered = relationships.filter(_.description.isDefined)
-      Map(relationshipsFiltered.map(r => r.description.get -> r.code.charAt(0)): _*)
-    }
+    db.run(newAction).map(_.map(_.toInt))
   }
 
   /**
@@ -79,30 +38,20 @@ trait DBFunctions extends LazyLogging {
    * @param ec Execution Context to Fork Processes Off Of
    * @return Unit. Fire and Forget On The Edge of The Application
    */
-  def UpdateDB(row: SpremrgRow)(implicit db: JdbcProfile#Backend#Database, ec: ExecutionContext): Future[Unit] = {
+  def UpdateDB(row: SpremrgRow)(implicit db: JdbcProfile#Backend#Database, ec: ExecutionContext): Future[Int] = {
     import profile.api._
 
-    val actions =  for {
+     for {
         bool <- queryIfEmergencyContactExists(row)
         result <- bool match {
           case true =>
             logger.debug(s"Updating Row $row")
-            updateByRow(row) recoverWith {
-              case badKid =>
-                logger.error(s"${badKid.getLocalizedMessage} at Pidm - ${row.pidm}, Priority - ${row.priority}")
-                Future { badKid }
-            }
+            updateByRow(row)
           case false =>
             logger.debug(s"Inserting Row $row")
-            db.run(Spremrg += row) recoverWith {
-              case badKid =>
-                logger.error(s"Error - ${badKid.getLocalizedMessage} at ${row.pidm}")
-                Future { badKid }
-            }
+            db.run(Spremrg += row)
         }
       } yield result
-
-    actions.map(_ => ())
   }
 
   /**
