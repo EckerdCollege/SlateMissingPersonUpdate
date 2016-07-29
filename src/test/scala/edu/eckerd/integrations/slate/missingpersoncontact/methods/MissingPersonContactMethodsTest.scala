@@ -59,7 +59,8 @@ class MissingPersonContactMethodsTest extends FlatSpec with Matchers with Missin
 
   val failSeqContact =
     Seq(failPidmResponse, nonePidmResponse, goodPidmResponse, failPidmOptOut, nonePidmOptOut, goodPidmOptOut)
-  val goodSeqContact = Seq(nonePidmResponse, goodPidmResponse, nonePidmOptOut, goodPidmOptOut)
+  val goodSeqContact = Seq(nonePidmResponse, goodPidmResponse, nonePidmOptOut, goodPidmOptOut,
+    goodIntlNumberResponse, invalidUSNumberResponse, invalidIntlNumberResponse, invalidZipResponse)
 
   "ProcessRequests" should "be able to deal with a sequence of  EmergencyContactRequests" in {
     val awaitable = ProcessResponses(goodSeqContact)

@@ -2,8 +2,7 @@ package edu.eckerd.integrations.slate.missingpersoncontact.request
 
 import edu.eckerd.integrations.slate.missingpersoncontact.model.{MissingPersonResponse, OptOut}
 import org.scalatest.{FlatSpec, Matchers}
-import spray.json.{JsObject, JsString}
-
+import spray.json.{DeserializationException, JsObject, JsString, deserializationError}
 /**
   * Created by davenpcm on 7/28/16.
   */
@@ -102,6 +101,16 @@ class jsonProtocolTests extends FlatSpec with Matchers {
       "AddressPostal" -> JsString("Zip")
     )
     MissingPersonContactFormat.read(j) should be (m)
+  }
+
+  it should "Fail to Parse Nonsense that is not correct" in {
+    val j =  JsObject(
+      "Nonsense" -> JsString("Monkeys"),
+      "Perfect" -> JsString("Eat Bananas")
+    )
+    intercept[DeserializationException]{
+      MissingPersonContactFormat.read(j)
+    }
   }
 
 
