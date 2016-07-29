@@ -12,7 +12,6 @@ import scala.concurrent.ExecutionContext
   * Created by davenpcm on 7/28/16.
   */
 trait CourierFunctions {
-  import courier.Defaults.session
   /**
     * This is the implicit class which can convert automatically a string to this class which has these functions
     * available to it. Therefore taking  an normal string and where this class is in scope giving it additional
@@ -36,9 +35,6 @@ trait CourierFunctions {
     val smtpPort = conf.smtpPort.asOption[Int].getOrElse(587)
     val authorize = conf.authorize.asOption[Boolean].getOrElse(true)
     val startTls = conf.startTls.asOption[Boolean].getOrElse(true)
-
-    println("The Email Is Sending")
-
     sendEmail(senderEmail, senderPassword, recipientEmail, subject, content, smtpServer, smtpPort, authorize, startTls)
   }
 
@@ -53,12 +49,10 @@ trait CourierFunctions {
                  authorize: Boolean,
                  startTtls: Boolean
                )(implicit ec: ExecutionContext): Future[Unit] ={
-
     val mailer = Mailer(smtpServer, smtpPort)
       .auth(authorize)
       .as(senderEmail, senderPassword)
       .startTtls(startTtls)
-
     val envelope : Envelope = Envelope
       .from(senderEmail.addr)
       .to(recipientEmail.addr)
@@ -66,7 +60,6 @@ trait CourierFunctions {
       .content(
         Multipart().html(content)
       )
-
     mailer()(envelope)
   }
 

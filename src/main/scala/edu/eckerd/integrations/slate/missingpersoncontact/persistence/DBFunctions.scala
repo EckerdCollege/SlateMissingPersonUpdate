@@ -30,29 +30,6 @@ trait DBFunctions extends LazyLogging with SPREMRG {
     db.run(newAction).map(_.map(_.toInt))
   }
 
-//  /**
-//   * This generates a Map from the description of the Relationship ie Mother, Father, Spouse to a code
-//   * value such as M, F , etc.
-//   * @param ec The execution context to fork futures from
-//   * @param db The database to fetch information from
-//   * @return This returns a Map of String -> Char
-//   */
-//  def generateRelationshipMap()(implicit ec: ExecutionContext, db: JdbcProfile#Backend#Database): Future[Map[String, Char]] = {
-//    import profile.api._
-//
-//    case class Relationship(code: String, description: Option[String])
-//    implicit val getRelationshipResult = GetResult(r => Relationship(r.<<, r.<<))
-//
-//    val action = sql"""SELECT STVRELT_CODE, STVRELT_DESC FROM STVRELT""".as[Relationship]
-//
-//    for {
-//      relationships <- db.run(action)
-//    } yield {
-//      val relationshipsFiltered = relationships.filter(_.description.isDefined)
-//      Map(relationshipsFiltered.map(r => r.description.get -> r.code.charAt(0)): _*)
-//    }
-//  }
-
   /**
    * Update The Database And Then Throw It away
    *

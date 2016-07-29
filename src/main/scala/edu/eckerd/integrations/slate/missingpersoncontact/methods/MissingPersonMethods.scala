@@ -83,19 +83,14 @@ trait MissingPersonMethods {
     *         we desire.
     */
   def TransformToRowOrEmail(missingPersonContact: MissingPersonContact)
-                           (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = {
-    val futurePidm : Future[Xor[MissingPersonContact, Int]] = pidmResponder(missingPersonContact.BannerID)
-      .map(Xor.fromOption(_, missingPersonContact))
-    val phoneXor: Xor[MissingPersonResponse, Option[PhoneNumber]] = parsePhone(missingPersonContact)
-    val zipXor : Xor[MissingPersonResponse, Option[String]] = parseZip(missingPersonContact)
-    for {
-      pidmXor <- futurePidm
-    } yield for {
-      pidm <- pidmXor
-      phoneOpt <- phoneXor
-      zipOpt <- zipXor
-    } yield createRow(missingPersonContact, zipOpt, pidm, phoneOpt)
-  }
+                           (implicit ec: ExecutionContext): Future[Xor[MissingPersonContact, SpremrgRow]] = for {
+    pidmXor <- pidmResponder(missingPersonContact.BannerID).map(Xor.fromOption(_, missingPersonContact))
+  } yield for {
+    pidm <- pidmXor
+    phoneOpt <- parsePhone(missingPersonContact)
+    zipOpt <- parseZip(missingPersonContact)
+  } yield createRow(missingPersonContact, zipOpt, pidm, phoneOpt)
+
 
   /**
     * This function transforms a sequence of Xors into a Tuple of two lists of the two types. We fold copying the
@@ -105,10 +100,8 @@ trait MissingPersonMethods {
     * @return A Tuple of A List of MissingPersonContact and SpremrgRow
     */
   def partitionXor(s: Seq[Xor[MissingPersonContact, SpremrgRow]]): (List[MissingPersonContact], List[SpremrgRow]) = {
-
     val leftAcc = List[MissingPersonContact]()
     val rightAcc = List[SpremrgRow]()
-
     def fold(next: Xor[MissingPersonContact, SpremrgRow], acc: (List[MissingPersonContact], List[SpremrgRow]))
     : (List[MissingPersonContact], List[SpremrgRow]) = next match {
       case Xor.Left(missingPersonResponse) =>
@@ -116,7 +109,6 @@ trait MissingPersonMethods {
       case Xor.Right(row) =>
         acc.copy( _2 = row :: acc._2 )
     }
-
     s.foldRight((leftAcc, rightAcc))(fold)
   }
 
