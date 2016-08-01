@@ -6,6 +6,8 @@ import java.sql.Timestamp
 import edu.eckerd.integrations.slate.missingpersoncontact.methods.MissingPersonMethods
 import edu.eckerd.integrations.slate.missingpersoncontact.model.{MissingPersonResponse, OptOut}
 import org.scalatest.{FlatSpec, Matchers}
+import slick.backend.DatabaseConfig
+import slick.driver.JdbcProfile
 
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
@@ -17,6 +19,7 @@ import scala.math.BigDecimal
   * Created by davenpcm on 7/28/16.
   */
 class PersistenceTests extends FlatSpec with Matchers with MissingPersonMethods with DBImpl  {
+  override implicit val dbConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig("oracle")
   override def pidmResponder: PidmResponder = (s: String) => Future.successful(Some(s.toInt))
   override def dbUpdateResponder: UpdateResponder = UpdateDB
   override def emailResponder: EmailResponder = (s: String) => Future.successful(())

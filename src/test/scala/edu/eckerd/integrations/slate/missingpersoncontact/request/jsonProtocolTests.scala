@@ -6,7 +6,7 @@ import spray.json.{DeserializationException, JsObject, JsString, deserialization
 /**
   * Created by davenpcm on 7/28/16.
   */
-class jsonProtocolTests extends FlatSpec with Matchers {
+class  jsonProtocolTests extends FlatSpec with Matchers {
   import jsonProtocol._
 
   "OptOutFormat" should "write an OptOut to json" in {

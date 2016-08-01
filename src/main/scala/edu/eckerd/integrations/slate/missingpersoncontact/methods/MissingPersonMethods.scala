@@ -2,16 +2,19 @@ package edu.eckerd.integrations.slate.missingpersoncontact.methods
 
 import cats.data.Xor
 import cats.implicits._
+import com.google.i18n.phonenumbers.PhoneNumberUtil
+import com.typesafe.scalalogging.LazyLogging
 import edu.eckerd.integrations.slate.missingpersoncontact.model._
 import edu.eckerd.integrations.slate.missingpersoncontact.persistence.SPREMRG
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 
 /**
   * Created by davenpcm on 7/27/16.
   */
-trait MissingPersonMethods {
+trait MissingPersonMethods extends LazyLogging {
   this : SPREMRG =>
 
   type PidmResponder = String => Future[Option[Int]]
@@ -128,13 +131,15 @@ trait MissingPersonMethods {
     val phoneNumber = phoneOpt.map(_.phoneNumber)
     contact match {
       case MissingPersonResponse(_, _, name, _, street, city,_) =>
+
         val pName: Name = parseName(name)
         val firstName = pName.first
         val lastName = pName.last
-        SpremrgRow(
+        val row = SpremrgRow(
           pidm, priority, lastName, firstName, Some(street), Some(city), zip,
           nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
+        row
       case OptOut(_) =>
         val firstName = "OPTION"
         val lastName = "DECLINED"
@@ -153,7 +158,12 @@ trait MissingPersonMethods {
     }
 
   def parseName(string: String): Name = {
-    Name(string.takeWhile(_ != ' '), string.dropWhile(_ != ' ').drop(1))
+    if (string.contains(' ')){
+      Name(string.takeWhile(_ != ' '), string.dropWhile(_ != ' ').drop(1))
+    } else {
+      Name(string, ".")
+    }
+
   }
 
   def parsePhone(missingPersonContact: MissingPersonContact)
@@ -161,18 +171,25 @@ trait MissingPersonMethods {
     case OptOut(_) =>
       Xor.Right(None)
     case missingPersonResponse: MissingPersonResponse =>
-      missingPersonResponse.Cell.replace("+", "").replace(".", "-").replace(" ", "-") match {
-        case usNumber if usNumber.startsWith("1-") && usNumber.length == 14 =>
-          val areaCode = usNumber.dropWhile(_ != '-').drop(1).takeWhile(_ != '-')
-          val phoneNumber = usNumber.dropWhile(_ != '-').drop(1).dropWhile(_ != '-').drop(1).replace("-", "")
-          Xor.Right(Some(PhoneNumber("1", Some(areaCode), phoneNumber)))
-        case intlParsed if intlParsed.dropWhile(_ != "-").drop(1).length <= 12 &&
-          !intlParsed.startsWith("1-") &&
-        intlParsed.takeWhile(_ != "-").length <= 4 =>
-          val natnCode = intlParsed.takeWhile(_ != "-")
-          val phoneNumber = intlParsed.dropWhile(_ != "-").drop(1).replace("-", "")
-          Xor.Right(Some(PhoneNumber(natnCode, None, phoneNumber)))
-        case _ => Xor.Left(missingPersonResponse)
+      val number = missingPersonResponse.Cell
+      val util = PhoneNumberUtil.getInstance()
+      val phoneTry = Try(util.parse(number, "US")).toOption
+
+      Xor.fromOption(phoneTry, missingPersonResponse)
+       .flatMap{ phoneParsed =>
+        val countryCode = phoneParsed.getCountryCode.toString
+        val nationalNumber = phoneParsed.getNationalNumber.toString
+
+        countryCode match {
+          case "1" =>
+            val areaCode = nationalNumber.take(3)
+            val number = nationalNumber.drop(3)
+            if (number.length == 7) Xor.Right(Some(PhoneNumber(countryCode, Some(areaCode), number)))
+            else Xor.Left(missingPersonResponse)
+          case _ =>
+            Xor.Right(Some(PhoneNumber(countryCode, None, nationalNumber)))
+        }
+
       }
   }
 
@@ -211,10 +228,10 @@ trait MissingPersonMethods {
       |                    <table border="0" cellpadding="0" cellspacing="0" width="800" id="emailContainer">
       |                        <tr>
       |                            <td align="center" valign="top">
-      |                                <h2>Unparsed Emergency Contacts</h2>
+      |                                <h2>Unparsed Missing Person Contacts</h2>
       |                            </td>
       |                        </tr>
-      |                        <table border="0" cellpadding="2" cellspacing="2" height="100%" width=100% id="emergencycontact">
+      |                        <table border="0" cellpadding="2" cellspacing="2" height="100%" width=100% id="MissingPersonContact">
       |                        <tr>
       |                        <th>Banner ID</th>
       |                        <th>Relationship</th>
