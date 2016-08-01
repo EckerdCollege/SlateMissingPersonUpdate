@@ -59,7 +59,10 @@ trait MissingPersonMethods extends LazyLogging {
     * @return A Future of Unit
     */
   def SendEmail(list: List[MissingPersonContact])(implicit ec: ExecutionContext): Future[Unit] =
-    emailResponder(generateCompleteHtmlString(list))
+    generateCompleteHtmlString(list) match {
+      case Some(html) => emailResponder(html)
+      case None => Future.successful(())
+    }
 
   /**
     * This function takes the initial sequence and transforms it into a sequence of Xor and then partitions that
@@ -205,52 +208,55 @@ trait MissingPersonMethods extends LazyLogging {
          |  <td>$AddressCity</td>
          |  <td>$AddressPostal</td>
          |</tr>
-       """.stripMargin
+         |""".stripMargin
     missingPersonContact match {
       case OptOut(id) => baseTable(id,"8","OPTION DECLINED","","","","")
       case MissingPersonResponse(s1, s2, s3, s4, s5, s6, s7) => baseTable(s1,s2, s3, s4, s5, s6, s7)
     }
   }
 
-  def generateCompleteHtmlString(list: List[MissingPersonContact]): String = {
-    val content = list.foldLeft("")(_ + generateHtmlString(_))
-    """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-      |<html xmlns="http://www.w3.org/1999/xhtml">
-      |    <head>
-      |        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-      |        <title></title>
-      |        <style></style>
-      |    </head>
-      |    <body>
-      |        <table border="0" cellpadding="0" cellspacing="0" height="100%" width="100%" id="bodyTable">
-      |            <tr>
-      |                <td align="center" valign="top">
-      |                    <table border="0" cellpadding="0" cellspacing="0" width="800" id="emailContainer">
-      |                        <tr>
-      |                            <td align="center" valign="top">
-      |                                <h2>Unparsed Missing Person Contacts</h2>
-      |                            </td>
-      |                        </tr>
-      |                        <table border="0" cellpadding="2" cellspacing="2" height="100%" width=100% id="MissingPersonContact">
-      |                        <tr>
-      |                        <th>Banner ID</th>
-      |                        <th>Relationship</th>
-      |                        <th>Name</th>
-      |                        <th>Phone Number</th>
-      |                        <th>Street Address</th>
-      |                        <th>City</th>
-      |                        <th>Zip Code</th>
-      |                        </tr>""".stripMargin +
-      content +
-      """
-        |                        </table>
-        |                    </table>
-        |                </td>
-        |            </tr>
-        |        </table>
-        |    </body>
-        |</html>
-      """.stripMargin
+  def generateCompleteHtmlString(list: List[MissingPersonContact]): Option[String] = {
+    if (list.isEmpty) None
+    else {
+      val content = list.foldLeft("")(_ + generateHtmlString(_))
+      Some("""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+        |<html xmlns="http://www.w3.org/1999/xhtml">
+        |    <head>
+        |        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        |        <title></title>
+        |        <style></style>
+        |    </head>
+        |    <body>
+        |        <table border="0" cellpadding="0" cellspacing="0" height="100%" width="100%" id="bodyTable">
+        |            <tr>
+        |                <td align="center" valign="top">
+        |                    <table border="0" cellpadding="0" cellspacing="0" width="800" id="emailContainer">
+        |                        <tr>
+        |                            <td align="center" valign="top">
+        |                                <h2>Unparsed Missing Person Contacts</h2>
+        |                            </td>
+        |                        </tr>
+        |                        <table border="0" cellpadding="2" cellspacing="2" height="100%" width=100% id="MissingPersonContact">
+        |                        <tr>
+        |                        <th>Banner ID</th>
+        |                        <th>Relationship</th>
+        |                        <th>Name</th>
+        |                        <th>Phone Number</th>
+        |                        <th>Street Address</th>
+        |                        <th>City</th>
+        |                        <th>Zip Code</th>
+        |                        </tr>""".stripMargin +
+        content +
+        """
+          |                        </table>
+          |                    </table>
+          |                </td>
+          |            </tr>
+          |        </table>
+          |    </body>
+          |</html>""".stripMargin )
+    }
+
   }
 
 }

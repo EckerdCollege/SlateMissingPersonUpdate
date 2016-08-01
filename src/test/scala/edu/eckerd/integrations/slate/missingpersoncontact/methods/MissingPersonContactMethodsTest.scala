@@ -245,5 +245,138 @@ class MissingPersonContactMethodsTest
       Await.result(partitionResponses(goodSeqContact).map(_._2), 1.second) should be (good)
   }
 
+  "generateHtmlString" should "write a MissingPersonResponse" in {
+    generateHtmlString(goodPidmResponse) should be (
+      """<tr>
+        |  <td>1</td>
+        |  <td>8</td>
+        |  <td>First Last</td>
+        |  <td>+1 360 555 0234</td>
+        |  <td>Street</td>
+        |  <td>City</td>
+        |  <td>Zip</td>
+        |</tr>
+        |""".stripMargin)
+  }
+
+  it should "write an OptOut" in {
+    generateHtmlString(goodPidmOptOut) should be(
+      """<tr>
+        |  <td>1</td>
+        |  <td>8</td>
+        |  <td>OPTION DECLINED</td>
+        |  <td></td>
+        |  <td></td>
+        |  <td></td>
+        |  <td></td>
+        |</tr>
+        |""".stripMargin)
+  }
+
+  "generateCompleteHtmlString" should "create a String with a valid sequence" in {
+    val l = List(goodPidmOptOut, goodPidmResponse)
+    generateCompleteHtmlString(l) should be(
+      Some(
+        """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+          |<html xmlns="http://www.w3.org/1999/xhtml">
+          |    <head>
+          |        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+          |        <title></title>
+          |        <style></style>
+          |    </head>
+          |    <body>
+          |        <table border="0" cellpadding="0" cellspacing="0" height="100%" width="100%" id="bodyTable">
+          |            <tr>
+          |                <td align="center" valign="top">
+          |                    <table border="0" cellpadding="0" cellspacing="0" width="800" id="emailContainer">
+          |                        <tr>
+          |                            <td align="center" valign="top">
+          |                                <h2>Unparsed Missing Person Contacts</h2>
+          |                            </td>
+          |                        </tr>
+          |                        <table border="0" cellpadding="2" cellspacing="2" height="100%" width=100% id="MissingPersonContact">
+          |                        <tr>
+          |                        <th>Banner ID</th>
+          |                        <th>Relationship</th>
+          |                        <th>Name</th>
+          |                        <th>Phone Number</th>
+          |                        <th>Street Address</th>
+          |                        <th>City</th>
+          |                        <th>Zip Code</th>
+          |                        </tr>""".stripMargin +
+          """<tr>
+            |  <td>1</td>
+            |  <td>8</td>
+            |  <td>OPTION DECLINED</td>
+            |  <td></td>
+            |  <td></td>
+            |  <td></td>
+            |  <td></td>
+            |</tr>
+            |""".stripMargin +
+          """<tr>
+            |  <td>1</td>
+            |  <td>8</td>
+            |  <td>First Last</td>
+            |  <td>+1 360 555 0234</td>
+            |  <td>Street</td>
+            |  <td>City</td>
+            |  <td>Zip</td>
+            |</tr>
+            |""".stripMargin +
+          """
+            |                        </table>
+            |                    </table>
+            |                </td>
+            |            </tr>
+            |        </table>
+            |    </body>
+            |</html>""".stripMargin )
+    )
+  }
+
+  it should "return a None if it is given an empty list" in {
+    val l = List[MissingPersonContact]()
+    generateCompleteHtmlString(l) should be (None)
+  }
+
+  "SendEmail" should "utilize the emailResponder if there is a value to be sent" in {
+    class cool extends MissingPersonMethods with DBImpl{
+      override implicit val dbConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig("oracle")
+      def pidmResponder : PidmResponder =  {
+        case fail if fail == "-1" => Future.failed(new testException())
+        case passAsNone if passAsNone == "0" => Future.successful(None)
+        case _ =>  Future.successful(Some(1))
+      }
+      def dbUpdateResponder : UpdateResponder = _ => Future.successful(1)
+      def emailResponder : EmailResponder = _ => Future.failed(new testException)
+      def timeResponder : java.sql.Timestamp = Timestamp.valueOf("2016-07-28 10:10:10.0")
+    }
+    val myobj = new cool
+    val l = List(goodPidmOptOut, goodPidmResponse)
+
+    intercept[testException]{
+      Await.result(myobj.SendEmail(l), 1.second)
+    }
+  }
+
+  it should "not Use the responder if the List is empty" in {
+    class cool extends MissingPersonMethods with DBImpl{
+      override implicit val dbConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig("oracle")
+      def pidmResponder : PidmResponder =  {
+        case fail if fail == "-1" => Future.failed(new testException())
+        case passAsNone if passAsNone == "0" => Future.successful(None)
+        case _ =>  Future.successful(Some(1))
+      }
+      def dbUpdateResponder : UpdateResponder = _ => Future.successful(1)
+      def emailResponder : EmailResponder = _ => Future.failed(new testException)
+      def timeResponder : java.sql.Timestamp = Timestamp.valueOf("2016-07-28 10:10:10.0")
+    }
+    val myobj = new cool
+    val l = List[MissingPersonContact]()
+
+    Await.result(myobj.SendEmail(l), 1.second) should be (())
+  }
+
 
 }
