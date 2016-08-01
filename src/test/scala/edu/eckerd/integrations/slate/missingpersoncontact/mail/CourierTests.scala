@@ -58,4 +58,16 @@ class CourierTests extends FlatSpec with Matchers with CourierFunctions {
     store.close()
   }
 
+  "addr" should "conver a string to an internet address" in {
+   "chris@test.com".addr should be (new InternetAddress("chris@test.com"))
+  }
+
+  "`@`" should "convert two strings into an internet Address" in {
+    "chris" `@` "test.com" should be (new InternetAddress("chris@test.com"))
+  }
+
+  "at" should "convert two strings into an internet Address" in {
+    "chris" at "test.com" should be (new InternetAddress("chris@test.com"))
+  }
+
 }
