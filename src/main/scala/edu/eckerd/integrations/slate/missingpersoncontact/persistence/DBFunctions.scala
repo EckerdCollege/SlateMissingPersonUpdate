@@ -42,12 +42,15 @@ trait DBFunctions extends LazyLogging with SPREMRG {
     import profile.api._
 
      for {
-        bool <- queryIfEmergencyContactExists(row)
-        result <- bool match {
-          case true =>
+        existsExactly <- queryIfExactEmergencyContactExists(row)
+        exists <- queryIfEmergencyContactExists(row)
+        result <- (existsExactly, exists) match {
+          case (true, _ ) =>
+            Future.successful(0)
+          case (false, true) =>
             logger.debug(s"Updating Row $row")
             updateByRow(row)
-          case false =>
+          case (false, false) =>
             logger.debug(s"Inserting Row $row")
             db.run(Spremrg += row)
         }
@@ -62,12 +65,53 @@ trait DBFunctions extends LazyLogging with SPREMRG {
    * @param db The database to check for information against.
    * @return A Boolean whether the record exists.
    */
-  def queryIfEmergencyContactExists(spremrgRow: SpremrgRow)(implicit ec: ExecutionContext, db: JdbcProfile#Backend#Database): Future[Boolean] = {
+  def queryIfEmergencyContactExists(spremrgRow: SpremrgRow)
+                                   (implicit ec: ExecutionContext,
+                                    db: JdbcProfile#Backend#Database): Future[Boolean] = {
     import profile.api._
     val action = Spremrg.filter(row =>
       row.spremrgPidm === spremrgRow.pidm && row.spremrgPriority === spremrgRow.priority).exists.result
 
-    action.statements.foreach(s => logger.debug(s"$s"))
+    db.run(action)
+  }
+
+  /**
+    * This checks if the exact row exists so that it is unnecessary to do an update at all.  The first part are required
+    * values that we will always check against, the second check if the record is the same to the one that exists if
+    * it has values and the other checks if the values are null so that comparison cannot be done using them.
+    * @param spremrgRow The row to check
+    * @param ec The execution context to fork futures from
+    * @param db The database to check
+    * @return A Future of aboolean representing whether or not it exists.
+    */
+  def queryIfExactEmergencyContactExists(spremrgRow: SpremrgRow)
+                                        (implicit ec: ExecutionContext,
+                                         db: JdbcProfile#Backend#Database): Future[Boolean] = {
+    import profile.api._
+    val action = Spremrg.filter(row =>
+      (
+        row.spremrgPidm === spremrgRow.pidm &&
+          row.spremrgPriority === spremrgRow.priority &&
+          row.spremrgLastName === spremrgRow.lastName &&
+          row.spremrgFirstName === spremrgRow.firstName &&
+          row.spremrgReltCode === spremrgRow.relationshipCode &&
+          row.spremrgDataOrigin === spremrgRow.dataOrigin
+        ) && ((
+        row.spremrgStreetLine1 === spremrgRow.streetAddr &&
+          row.spremrgCity === spremrgRow.city &&
+          row.spremrgZip === spremrgRow.zip &&
+          row.spremrgCtryCodePhone === spremrgRow.phoneCountryCode &&
+          row.spremrgPhoneArea === spremrgRow.phoneAreaCode &&
+          row.spremrgPhoneNumber === spremrgRow.phoneNumber
+        ) || (
+        row.spremrgStreetLine1.isEmpty &&
+          row.spremrgCity.isEmpty &&
+          row.spremrgZip.isEmpty &&
+          row.spremrgCtryCodePhone.isEmpty &&
+          row.spremrgPhoneArea.isEmpty &&
+          row.spremrgPhoneNumber.isEmpty
+        ))
+    ).exists.result
 
     db.run(action)
   }
