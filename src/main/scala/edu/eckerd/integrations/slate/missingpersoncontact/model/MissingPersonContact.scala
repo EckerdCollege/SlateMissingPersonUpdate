@@ -14,20 +14,22 @@ object MissingPersonContact{
             Cell: String,
             AddressStreet: String,
             AddressCity: String,
+            AddressState: String,
             AddressPostal: String): MissingPersonContact = Name match {
     case optOutConvert if optOutConvert == "OPTION DECLINED" =>
       OptOut(BannerID)
-    case _ => MissingPersonResponse(BannerID, Relationship, Name, Cell, AddressStreet, AddressCity, AddressPostal)
+    case _ => MissingPersonResponse(BannerID, Relationship, Name, Cell, AddressStreet, AddressCity, AddressState, AddressPostal)
   }
 
   def apply(missingPersonResponse: MissingPersonResponse): MissingPersonContact =
-    this.apply(
+    MissingPersonContact.apply(
       missingPersonResponse.BannerID,
       missingPersonResponse.Relationship,
       missingPersonResponse.Name,
       missingPersonResponse.Cell,
       missingPersonResponse.AddressStreet,
       missingPersonResponse.AddressCity,
+      missingPersonResponse.AddressState,
       missingPersonResponse.AddressPostal
     )
 
@@ -44,6 +46,7 @@ case class MissingPersonResponse(
                                          Cell: String,
                                          AddressStreet: String,
                                          AddressCity: String,
+                                         AddressState: String,
                                          AddressPostal: String
                                        ) extends MissingPersonContact
 

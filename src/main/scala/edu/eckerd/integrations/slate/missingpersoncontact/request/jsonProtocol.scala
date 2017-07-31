@@ -11,7 +11,7 @@ import scala.util.Try
   * Created by davenpcm on 7/27/16.
   */
 object jsonProtocol extends DefaultJsonProtocol{
-  implicit val MissingPersonResponseFormat = jsonFormat7(MissingPersonResponse)
+  implicit val MissingPersonResponseFormat = jsonFormat8(MissingPersonResponse)
   implicit val OptOutResponseFormat = jsonFormat1(OptOut)
 
   implicit object MissingPersonContactFormat extends RootJsonFormat[MissingPersonContact] {
