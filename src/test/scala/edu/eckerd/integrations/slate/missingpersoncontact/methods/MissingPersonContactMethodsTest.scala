@@ -42,6 +42,7 @@ class MissingPersonContactMethodsTest
 
   val street = "Street"
   val city = "City"
+  val state = "State"
 
   val zip = "Zip"
   val invalidZip = "thisHasToBeLongerThanThirtyCharactersLongToGenerateTheInvalidation"
@@ -50,15 +51,15 @@ class MissingPersonContactMethodsTest
   val intlPhone = "+23 23-4237-1332"
   val invalidUSPhone = "+1 5604839450234523"
 
-  val failPidmResponse = MissingPersonResponse( failID, relationship, name, usPhone, street, city, zip )
-  val nonePidmResponse = MissingPersonResponse(noneID, relationship, name, usPhone, street, city, zip)
-  val goodPidmResponse = MissingPersonResponse(goodID, relationship, name, usPhone, street, city, zip)
+  val failPidmResponse = MissingPersonResponse( failID, relationship, name, usPhone, street, city, state, zip )
+  val nonePidmResponse = MissingPersonResponse(noneID, relationship, name, usPhone, street, city, state, zip)
+  val goodPidmResponse = MissingPersonResponse(goodID, relationship, name, usPhone, street, city, state, zip)
 
-  val goodIntlNumberResponse = MissingPersonResponse(goodID, relationship, name, intlPhone, street, city, zip)
-  val invalidUSNumberResponse = MissingPersonResponse(goodID, relationship, name, invalidUSPhone, street, city, zip)
-  val invalidIntlNumberResponse = MissingPersonResponse(goodID, relationship, name, invalidUSPhone, street, city, zip)
+  val goodIntlNumberResponse = MissingPersonResponse(goodID, relationship, name, intlPhone, street, city, state, zip)
+  val invalidUSNumberResponse = MissingPersonResponse(goodID, relationship, name, invalidUSPhone, street, city, state, zip)
+  val invalidIntlNumberResponse = MissingPersonResponse(goodID, relationship, name, invalidUSPhone, street, city, state, zip)
 
-  val invalidZipResponse = MissingPersonResponse(goodID, relationship, name, invalidUSPhone, street, city, invalidZip)
+  val invalidZipResponse = MissingPersonResponse(goodID, relationship, name, invalidUSPhone, street, city, state, invalidZip)
 
 
 
@@ -84,7 +85,7 @@ class MissingPersonContactMethodsTest
   }
 
   def phoneFactory(string: String): MissingPersonResponse =
-    MissingPersonResponse(goodID, relationship, name, string, street, city, zip)
+    MissingPersonResponse(goodID, relationship, name, string, street, city, state, zip)
 
   "parsePhone" should "parse a US Number" in {
     val phone: String = "+1 908-789-9691"
@@ -148,7 +149,7 @@ class MissingPersonContactMethodsTest
   }
 
   def zipFactory(zip: String): MissingPersonResponse =
-    MissingPersonResponse(goodID, relationship, name, usPhone, street, city, zip)
+    MissingPersonResponse(goodID, relationship, name, usPhone, street, city, state, zip)
 
   "parseZip" should "accept any zip less than 30 characters" in {
     val zip: String = "98662"
@@ -168,7 +169,7 @@ class MissingPersonContactMethodsTest
   }
 
   "TransformToRowOrEmail" should "parse a valid record to a Row" in {
-    val mpr = MissingPersonResponse("1", "8", "First Last", "+1 360 903 2985", "street", "city", "zip")
+    val mpr = MissingPersonResponse("1", "8", "First Last", "+1 360 903 2985", "street", "city", "state", "zip")
     val r = SpremrgRow(
       1,
       "8".charAt(0),
@@ -176,6 +177,7 @@ class MissingPersonContactMethodsTest
       "First",
       Some("street"),
       Some("city"),
+      Some("state"),
       Some("zip"),
       Some("1"),
       Some("360"),
@@ -202,6 +204,7 @@ class MissingPersonContactMethodsTest
       None,
       None,
       None,
+      None,
       Some("8".charAt(0)),
       timeResponder,
       Some("Slate Transfer"),
@@ -212,7 +215,7 @@ class MissingPersonContactMethodsTest
   }
 
   it should "go Left if the zip is too Long" in {
-    val mpr = MissingPersonResponse("1", "8", "First Last", "+1 360 903 2985", "street", "city",
+    val mpr = MissingPersonResponse("1", "8", "First Last", "+1 360 903 2985", "street", "city", "state",
       "10 Downing St, London SW1A 2AA, United Kingdom")
 
     Await.result(TransformToRowOrEmail(mpr), 1.second) should be (Xor.Left(mpr))
@@ -231,13 +234,13 @@ class MissingPersonContactMethodsTest
 
   it should "seperate good Responses to the Right as SpremrgRows" in {
     val good = List(
-      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("Zip"),
+      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("State"), Some("Zip"),
         Some("1"), Some("360"), Some("5550234"), Some("8".charAt(0)), timeResponder, Some("Slate Transfer"), Some("ECBATCH")
       ),
-      SpremrgRow(1, "8".charAt(0), "DECLINED", "OPTION", None, None, None,
+      SpremrgRow(1, "8".charAt(0), "DECLINED", "OPTION", None, None, None, None,
         None, None, None, Some("8".charAt(0)), timeResponder, Some("Slate Transfer"), Some("ECBATCH")
       ),
-      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("Zip"),
+      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("State"), Some("Zip"),
         Some("232"), None, Some("342371332"), Some("8".charAt(0)), timeResponder, Some("Slate Transfer"), Some("ECBATCH")
       )
     )
@@ -254,6 +257,7 @@ class MissingPersonContactMethodsTest
         |  <td>+1 360 555 0234</td>
         |  <td>Street</td>
         |  <td>City</td>
+        |  <td>State</td>
         |  <td>Zip</td>
         |</tr>
         |""".stripMargin)
@@ -265,6 +269,7 @@ class MissingPersonContactMethodsTest
         |  <td>1</td>
         |  <td>8</td>
         |  <td>OPTION DECLINED</td>
+        |  <td></td>
         |  <td></td>
         |  <td></td>
         |  <td></td>
@@ -302,12 +307,14 @@ class MissingPersonContactMethodsTest
           |                        <th>Phone Number</th>
           |                        <th>Street Address</th>
           |                        <th>City</th>
+          |                        <th>State</th>
           |                        <th>Zip Code</th>
           |                        </tr>""".stripMargin +
           """<tr>
             |  <td>1</td>
             |  <td>8</td>
             |  <td>OPTION DECLINED</td>
+            |  <td></td>
             |  <td></td>
             |  <td></td>
             |  <td></td>
@@ -321,6 +328,7 @@ class MissingPersonContactMethodsTest
             |  <td>+1 360 555 0234</td>
             |  <td>Street</td>
             |  <td>City</td>
+            |  <td>State</td>
             |  <td>Zip</td>
             |</tr>
             |""".stripMargin +

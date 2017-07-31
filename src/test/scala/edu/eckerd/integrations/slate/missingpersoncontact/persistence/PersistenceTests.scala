@@ -41,7 +41,7 @@ class PersistenceTests extends FlatSpec with Matchers with MissingPersonMethods 
   it should "update the record if it exists" in {
     val id = 100
     val row1 = createRow(
-      MissingPersonResponse(s"${id.toString}", "8", "First Last", "Cell", "Street", "City", "Zip"),
+      MissingPersonResponse(s"${id.toString}", "8", "First Last", "Cell", "Street", "City", "FL", "Zip"),
       None,
       id,
       None

@@ -22,7 +22,7 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
   }
 
   "MissingPersonResponseFormat" should "write a MissingPersonResponse to json" in {
-    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "Zip")
+    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "State", "Zip")
     val j = JsObject(
       "BannerID" -> JsString("1"),
       "Relationship" -> JsString("8"),
@@ -30,13 +30,14 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
       "Cell" -> JsString("Cell"),
       "AddressStreet" -> JsString("Street"),
       "AddressCity" -> JsString("City"),
+      "AddressState" -> JsString("State"),
       "AddressPostal" -> JsString("Zip")
       )
     MissingPersonResponseFormat.write(m) should be (j)
   }
 
   it should "read a MissingPersonResponse from json" in {
-    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "Zip")
+    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "State", "Zip")
     val j = JsObject(
       "BannerID" -> JsString("1"),
       "Relationship" -> JsString("8"),
@@ -44,6 +45,7 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
       "Cell" -> JsString("Cell"),
       "AddressStreet" -> JsString("Street"),
       "AddressCity" -> JsString("City"),
+      "AddressState" -> JsString("State"),
       "AddressPostal" -> JsString("Zip")
     )
     MissingPersonResponseFormat.read(j) should be (m)
@@ -56,7 +58,7 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
   }
 
   it should "be able to write a MissingPersonResponse" in {
-    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "Zip")
+    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "State", "Zip")
     val j = JsObject(
       "BannerID" -> JsString("1"),
       "Relationship" -> JsString("8"),
@@ -64,6 +66,7 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
       "Cell" -> JsString("Cell"),
       "AddressStreet" -> JsString("Street"),
       "AddressCity" -> JsString("City"),
+      "AddressState" -> JsString("State"),
       "AddressPostal" -> JsString("Zip")
     )
     MissingPersonContactFormat.write(m) should be (j)
@@ -76,7 +79,7 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
   }
 
   it should "be able to read a MissingPersonResponse with values" in {
-    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "Zip")
+    val m = MissingPersonResponse("1", "8", "First Last", "Cell", "Street", "City", "State", "Zip")
     val j = JsObject(
       "BannerID" -> JsString("1"),
       "Relationship" -> JsString("8"),
@@ -84,6 +87,7 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
       "Cell" -> JsString("Cell"),
       "AddressStreet" -> JsString("Street"),
       "AddressCity" -> JsString("City"),
+      "AddressState" -> JsString("State"),
       "AddressPostal" -> JsString("Zip")
     )
     MissingPersonContactFormat.read(j) should be (m)
@@ -98,6 +102,7 @@ class  jsonProtocolTests extends FlatSpec with Matchers {
       "Cell" -> JsString("Cell"),
       "AddressStreet" -> JsString("Street"),
       "AddressCity" -> JsString("City"),
+      "AddressState" -> JsString("State"),
       "AddressPostal" -> JsString("Zip")
     )
     MissingPersonContactFormat.read(j) should be (m)
