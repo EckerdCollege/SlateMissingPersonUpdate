@@ -33,18 +33,20 @@ class PersistenceTests extends FlatSpec with Matchers with MissingPersonMethods 
 
   "UpdateDB" should "Be Able To Add A Row" in {
     val id = 100
-    val row1 = createRow(OptOut(s"${id.toString}"), None, id, None)
+    val row1 = createRow(OptOut(s"${id.toString}"), None, id, None, None)
     Await.result(UpdateDB(row1), 2.seconds) should be (1)
     Await.result(db.run(Spremrg.filter(_.spremrgPidm === id).result.head), 2.seconds) should be (row1)
   }
 
   it should "update the record if it exists" in {
     val id = 100
+    val state = "FL"
     val row1 = createRow(
-      MissingPersonResponse(s"${id.toString}", "8", "First Last", "Cell", "Street", "City", "FL", "Zip"),
+      MissingPersonResponse(s"${id.toString}", "8", "First Last", "Cell", "Street", "City", state, "Zip"),
       None,
       id,
-      None
+      None,
+      Some(state)
     )
     Await.result(UpdateDB(row1), 2.seconds) should be (1)
 
@@ -53,13 +55,13 @@ class PersistenceTests extends FlatSpec with Matchers with MissingPersonMethods 
 
   "QueryIfEmergencyContactExists" should "return true if the row already exists" in {
     val id = 100
-    val row1 = createRow(OptOut(s"${id.toString}"), None, id, None)
+    val row1 = createRow(OptOut(s"${id.toString}"), None, id, None, None)
     Await.result(queryIfEmergencyContactExists(row1), 2.seconds) should be (true)
   }
 
   it should "return false if the row does not exist" in {
     val id = 200
-    val row1 = createRow(OptOut(s"${id.toString}"), None, id, None)
+    val row1 = createRow(OptOut(s"${id.toString}"), None, id, None, None)
     Await.result(queryIfEmergencyContactExists(row1), 2.seconds) should be (false)
   }
 

@@ -95,7 +95,8 @@ trait MissingPersonMethods extends LazyLogging {
     pidm <- pidmXor
     phoneOpt <- parsePhone(missingPersonContact)
     zipOpt <- parseZip(missingPersonContact)
-  } yield createRow(missingPersonContact, zipOpt, pidm, phoneOpt)
+    stateOpt <- parseState(missingPersonContact)
+  } yield createRow(missingPersonContact, zipOpt, pidm, phoneOpt, stateOpt)
 
 
   /**
@@ -123,6 +124,7 @@ trait MissingPersonMethods extends LazyLogging {
                  zip: Option[String],
                  pidm: Int,
                  phoneOpt: Option[PhoneNumber],
+                 stateOpt: Option[String],
                  time : java.sql.Timestamp = timeResponder
                ): SpremrgRow = {
     val dataOrigin = Some("Slate Transfer")
@@ -139,7 +141,7 @@ trait MissingPersonMethods extends LazyLogging {
         val firstName = pName.first
         val lastName = pName.last
         val row = SpremrgRow(
-          pidm, priority, lastName, firstName, Some(street), Some(city), Some(state), zip,
+          pidm, priority, lastName, firstName, Some(street), Some(city), stateOpt, zip,
           nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
         row
@@ -150,6 +152,15 @@ trait MissingPersonMethods extends LazyLogging {
           pidm, priority, lastName, firstName, None, None, None, None,
           nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
+    }
+  }
+
+  def parseState(missingPersonContact: MissingPersonContact): Xor[MissingPersonResponse, Option[String]] = {
+    missingPersonContact match {
+      case
+        OptOut(_) => Xor.right(None)
+      case MissingPersonResponse(_, _ , _, _ , _, _ , state, _) if state.length <= 3 => Xor.right(Option(state))
+      case unmatched: MissingPersonResponse => Xor.left(unmatched)
     }
   }
 
@@ -166,7 +177,6 @@ trait MissingPersonMethods extends LazyLogging {
     } else {
       Name(string, ".")
     }
-
   }
 
   def parsePhone(missingPersonContact: MissingPersonContact)

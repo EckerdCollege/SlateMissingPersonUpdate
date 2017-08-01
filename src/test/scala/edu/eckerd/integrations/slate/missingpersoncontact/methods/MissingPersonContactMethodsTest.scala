@@ -42,7 +42,7 @@ class MissingPersonContactMethodsTest
 
   val street = "Street"
   val city = "City"
-  val state = "State"
+  val state = "FL"
 
   val zip = "Zip"
   val invalidZip = "thisHasToBeLongerThanThirtyCharactersLongToGenerateTheInvalidation"
@@ -169,7 +169,7 @@ class MissingPersonContactMethodsTest
   }
 
   "TransformToRowOrEmail" should "parse a valid record to a Row" in {
-    val mpr = MissingPersonResponse("1", "8", "First Last", "+1 360 903 2985", "street", "city", "state", "zip")
+    val mpr = MissingPersonResponse("1", "8", "First Last", "+1 360 903 2985", "street", "city", "FL", "zip")
     val r = SpremrgRow(
       1,
       "8".charAt(0),
@@ -177,7 +177,7 @@ class MissingPersonContactMethodsTest
       "First",
       Some("street"),
       Some("city"),
-      Some("state"),
+      Some("FL"),
       Some("zip"),
       Some("1"),
       Some("360"),
@@ -234,13 +234,13 @@ class MissingPersonContactMethodsTest
 
   it should "seperate good Responses to the Right as SpremrgRows" in {
     val good = List(
-      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("State"), Some("Zip"),
+      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("FL"), Some("Zip"),
         Some("1"), Some("360"), Some("5550234"), Some("8".charAt(0)), timeResponder, Some("Slate Transfer"), Some("ECBATCH")
       ),
       SpremrgRow(1, "8".charAt(0), "DECLINED", "OPTION", None, None, None, None,
         None, None, None, Some("8".charAt(0)), timeResponder, Some("Slate Transfer"), Some("ECBATCH")
       ),
-      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("State"), Some("Zip"),
+      SpremrgRow(1, "8".charAt(0), "Last", "First", Some("Street"), Some("City"), Some("FL"), Some("Zip"),
         Some("232"), None, Some("342371332"), Some("8".charAt(0)), timeResponder, Some("Slate Transfer"), Some("ECBATCH")
       )
     )
@@ -257,7 +257,7 @@ class MissingPersonContactMethodsTest
         |  <td>+1 360 555 0234</td>
         |  <td>Street</td>
         |  <td>City</td>
-        |  <td>State</td>
+        |  <td>FL</td>
         |  <td>Zip</td>
         |</tr>
         |""".stripMargin)
@@ -328,7 +328,7 @@ class MissingPersonContactMethodsTest
             |  <td>+1 360 555 0234</td>
             |  <td>Street</td>
             |  <td>City</td>
-            |  <td>State</td>
+            |  <td>FL</td>
             |  <td>Zip</td>
             |</tr>
             |""".stripMargin +
