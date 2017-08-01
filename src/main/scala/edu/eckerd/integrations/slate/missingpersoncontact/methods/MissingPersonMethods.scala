@@ -133,13 +133,13 @@ trait MissingPersonMethods extends LazyLogging {
     val areaCode = phoneOpt.flatMap(_.areaCode)
     val phoneNumber = phoneOpt.map(_.phoneNumber)
     contact match {
-      case MissingPersonResponse(_, _, name, _, street, city,_) =>
+      case MissingPersonResponse(_, _, name, _, street, city, state, _) =>
 
         val pName: Name = parseName(name)
         val firstName = pName.first
         val lastName = pName.last
         val row = SpremrgRow(
-          pidm, priority, lastName, firstName, Some(street), Some(city), zip,
+          pidm, priority, lastName, firstName, Some(street), Some(city), Some(state), zip,
           nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
         row
@@ -147,7 +147,7 @@ trait MissingPersonMethods extends LazyLogging {
         val firstName = "OPTION"
         val lastName = "DECLINED"
         SpremrgRow(
-          pidm, priority, lastName, firstName, None, None, None,
+          pidm, priority, lastName, firstName, None, None, None, None,
           nationCode, areaCode, phoneNumber, relationship, time, dataOrigin, userId
         )
     }
@@ -156,7 +156,7 @@ trait MissingPersonMethods extends LazyLogging {
   def parseZip(missingPersonContact: MissingPersonContact): Xor[MissingPersonResponse, Option[String]] =
     missingPersonContact match {
       case OptOut(_) => Xor.Right(None)
-      case MissingPersonResponse(_, _ , _, _ , _ , _ , zip) if zip.length <= 30 => Xor.Right(Some(zip))
+      case MissingPersonResponse(_, _ , _, _ , _ , _ , _, zip) if zip.length <= 30 => Xor.Right(Some(zip))
       case responseUnmatched : MissingPersonResponse => Xor.Left(responseUnmatched)
     }
 
@@ -197,8 +197,8 @@ trait MissingPersonMethods extends LazyLogging {
   }
 
   def generateHtmlString(missingPersonContact: MissingPersonContact): String = {
-    val baseTable: (String, String, String, String, String, String, String) => String =
-      (BannerID, Relationship, Name, Cell, AddressStreet, AddressCity, AddressPostal) =>
+    val baseTable: (String, String, String, String, String, String, String, String) => String =
+      (BannerID, Relationship, Name, Cell, AddressStreet, AddressCity, AddressState, AddressPostal) =>
       s"""<tr>
          |  <td>$BannerID</td>
          |  <td>$Relationship</td>
@@ -206,12 +206,13 @@ trait MissingPersonMethods extends LazyLogging {
          |  <td>$Cell</td>
          |  <td>$AddressStreet</td>
          |  <td>$AddressCity</td>
+         |  <td>$AddressState</td>
          |  <td>$AddressPostal</td>
          |</tr>
          |""".stripMargin
     missingPersonContact match {
-      case OptOut(id) => baseTable(id,"8","OPTION DECLINED","","","","")
-      case MissingPersonResponse(s1, s2, s3, s4, s5, s6, s7) => baseTable(s1,s2, s3, s4, s5, s6, s7)
+      case OptOut(id) => baseTable(id,"8","OPTION DECLINED","","","", "", "")
+      case MissingPersonResponse(s1, s2, s3, s4, s5, s6, s7, s8) => baseTable(s1,s2, s3, s4, s5, s6, s7, s8)
     }
   }
 
@@ -244,6 +245,7 @@ trait MissingPersonMethods extends LazyLogging {
         |                        <th>Phone Number</th>
         |                        <th>Street Address</th>
         |                        <th>City</th>
+        |                        <th>State</th>
         |                        <th>Zip Code</th>
         |                        </tr>""".stripMargin +
         content +
